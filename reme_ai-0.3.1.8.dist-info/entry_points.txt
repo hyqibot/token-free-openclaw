@@ -1,0 +1,4 @@
+[console_scripts]
+reme = reme_ai.main:main
+reme2 = reme.reme:main
+remecli = reme.reme_cli:main

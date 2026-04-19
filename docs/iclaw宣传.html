@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iClaw · 永久免token费的OpenClaw | 宣传图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0a0f1e 0%, #0c1222 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        }
+
+        /* 主宣传卡片 */
+        .hero {
+            max-width: 1200px;
+            width: 100%;
+            background: radial-gradient(circle at 20% 30%, rgba(30, 40, 70, 0.5), rgba(8, 12, 25, 0.9)),
+                        linear-gradient(145deg, #0e1628, #060a18);
+            border-radius: 64px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 0 1px rgba(66, 153, 225, 0.2) inset, 0 0 0 2px rgba(255,255,255,0.05) inset;
+            overflow: hidden;
+            backdrop-filter: blur(2px);
+            transition: transform 0.3s ease;
+        }
+
+        .hero:hover {
+            transform: scale(1.01);
+        }
+
+        /* 装饰光效 */
+        .glow {
+            position: relative;
+        }
+
+        .glow::before {
+            content: "";
+            position: absolute;
+            top: -20%;
+            left: -10%;
+            width: 120%;
+            height: 140%;
+            background: radial-gradient(circle at 30% 20%, rgba(0, 255, 255, 0.08), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* 内容容器 */
+        .content {
+            position: relative;
+            z-index: 2;
+            padding: 48px 56px 56px 56px;
+        }
+
+        /* 头部 + 徽章 */
+        .badge-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .free-badge {
+            background: linear-gradient(110deg, #fbbf24, #f59e0b);
+            color: #0a0c1a;
+            font-weight: 800;
+            font-size: 1rem;
+            padding: 8px 20px;
+            border-radius: 60px;
+            box-shadow: 0 4px 12px rgba(245,158,11,0.4);
+            letter-spacing: 0.5px;
+            backdrop-filter: blur(2px);
+        }
+
+        .free-badge span {
+            font-size: 1.3rem;
+            margin-right: 6px;
+        }
+
+        .version-tag {
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(8px);
+            padding: 6px 16px;
+            border-radius: 40px;
+            color: #a0b3d9;
+            font-size: 0.85rem;
+            font-weight: 500;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        h1 {
+            font-size: 5.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #FFFFFF 0%, #B3E5FF 40%, #7AA9FF 80%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .tagline {
+            font-size: 1.5rem;
+            color: #cbd5ff;
+            font-weight: 500;
+            border-left: 4px solid #3b82f6;
+            padding-left: 20px;
+            margin-bottom: 40px;
+            letter-spacing: -0.2px;
+        }
+
+        /* 核心卖点卡片组 */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+            margin-bottom: 48px;
+        }
+
+        .feature-card {
+            background: rgba(18, 25, 45, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 32px;
+            padding: 20px 24px;
+            border: 1px solid rgba(59,130,246,0.3);
+            transition: all 0.2s ease;
+            box-shadow: 0 8px 20px -8px rgba(0,0,0,0.4);
+        }
+
+        .feature-card:hover {
+            border-color: #3b82f6;
+            background: rgba(30, 45, 75, 0.8);
+            transform: translateY(-4px);
+        }
+
+        .feature-icon {
+            font-size: 2.2rem;
+            margin-bottom: 16px;
+        }
+
+        .feature-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 12px;
+        }
+
+        .feature-desc {
+            color: #9ca8cf;
+            line-height: 1.45;
+            font-size: 0.95rem;
+        }
+
+        .highlight {
+            color: #facc15;
+            font-weight: 600;
+        }
+
+        /* 技能表格区 (桌面三大利器) */
+        .skills-section {
+            background: rgba(0, 0, 0, 0.45);
+            border-radius: 40px;
+            padding: 28px 32px;
+            margin-bottom: 42px;
+            border: 1px solid rgba(59,130,246,0.3);
+        }
+
+        .skills-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #eef5ff;
+            margin-bottom: 24px;
+        }
+
+        .skills-title span {
+            background: #2563eb;
+            padding: 6px 14px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .skill-table {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: space-between;
+        }
+
+        .skill-item {
+            flex: 1;
+            min-width: 180px;
+            background: #0f1424cc;
+            border-radius: 28px;
+            padding: 20px 18px;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .skill-name {
+            font-weight: 800;
+            font-size: 1.25rem;
+            color: #90d0ff;
+            margin-bottom: 10px;
+        }
+
+        .skill-desc {
+            font-size: 0.85rem;
+            color: #b9c7f0;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+
+        .skill-dep {
+            font-size: 0.7rem;
+            background: #1e2a3e;
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 40px;
+            color: #a5c9ff;
+        }
+
+        /* 联系区 */
+        .contact-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .dingtalk-btn {
+            background: #0a6cff;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 28px;
+            border-radius: 60px;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+            transition: 0.2s;
+            font-size: 1rem;
+        }
+
+        .dingtalk-btn:hover {
+            background: #2b7eff;
+            transform: scale(1.02);
+            box-shadow: 0 8px 20px #0a6cff40;
+        }
+
+        .license-note {
+            font-size: 0.7rem;
+            color: #5f739b;
+        }
+
+        .badges-sm {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .badges-sm span {
+            background: #1e2a3e;
+            padding: 6px 14px;
+            border-radius: 40px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #b9d0ff;
+        }
+
+        @media (max-width: 780px) {
+            .content {
+                padding: 32px 24px;
+            }
+            h1 {
+                font-size: 3.5rem;
+            }
+            .tagline {
+                font-size: 1.2rem;
+            }
+            .skills-section {
+                padding: 20px;
+            }
+        }
+
+        /* 小点缀 */
+        .corner-accent {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 280px;
+            height: 280px;
+            background: radial-gradient(circle, rgba(59,130,246,0.1) 0%, rgba(0,0,0,0) 70%);
+            pointer-events: none;
+        }
+
+        .qr-note {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+<div class="hero glow">
+    <div class="content">
+        <div class="badge-row">
+            <div class="free-badge">
+                <span>⚡</span> 永久免 token 费 · 全网首发
+            </div>
+            <div class="version-tag">
+                🧬 iClaw · i龙虾 | 普惠ai发烧友
+            </div>
+        </div>
+
+        <h1>iClaw</h1>
+        <div class="tagline">
+            💙 爱你所爱，如影随形 · 永久免 token 的 openclaw 超级版
+        </div>
+
+        <!-- 核心四大特色网格 -->
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">♾️</div>
+                <div class="feature-title">免 token 无限调用</div>
+                <div class="feature-desc">Web模型调用技术，热门模型<span class="highlight">全免费</span>，永不消耗云端API额度。</div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📱💬</div>
+                <div class="feature-title">微信 · 钉钉双端</div>
+                <div class="feature-desc">多端接入控制，社交即指令，随时随地调度iClaw。</div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🚀</div>
+                <div class="feature-title">无需安装 · 开箱即用</div>
+                <div class="feature-desc">Win10+拷贝项目，直接运行exe（需Chrome），抖音号看视频教程。</div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🧠📈</div>
+                <div class="feature-title">AlphaHYQi :比iclaw更智能,比openclaw更早发布</div>
+                <div class="feature-desc">更智能真干活，在人类生活最复杂的领域实现全自主干活。100% AI 自主决策、自我发现、自我进化、自主实盘交易(<span class="highlight">新版将接入skill</span>)</div>
+            </div>
+        </div>
+
+        <!-- 三个重磅 skill 展示 -->
+        <div class="skills-section">
+            <div class="skills-title">
+                🔧 三大重磅 Skill · 大幅提升 Windows 桌面执行能力
+                <span>新增必读</span>
+            </div>
+            <div class="skill-table">
+                <div class="skill-item">
+                    <div class="skill-name">📂 open_desktop_shortcuts</div>
+                    <div class="skill-desc">按名打开桌面/开始菜单快捷方式(.lnk/.url)，首个匹配即启动。</div>
+                    <div class="skill-dep">依赖：仅Windows，零额外安装</div>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-name">🪟 native_window_control</div>
+                    <div class="skill-desc">窗口枚举、控件快照、原生点击/输入，完全控制桌面应用。</div>
+                    <div class="skill-dep">依赖：pywinauto (pip安装)</div>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-name">📦 exe_bundle</div>
+                    <div class="skill-desc">约定式封装exe+dll+资源，接入Skill体系，任意程序皆可调用。</div>
+                    <div class="skill-dep">依赖：无，约定即用</div>
+                </div>
+            </div>
+            <div style="margin-top: 20px; font-size:0.8rem; background: #0b1020; border-radius: 28px; padding: 12px 18px; color:#7e8fc7;">
+                💡 同时兼容所有 OpenClaw 技能 + 全自动智能选股/交易扩展，定时任务/文档处理/邮件摘要皆可执行。
+            </div>
+        </div>
+
+        <!-- 安全 + 上游能力 -->
+        <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 32px; justify-content: space-between;">
+            <div style="background: #0a1022aa; border-radius: 28px; padding: 12px 20px; flex:1;">
+                <div style="font-weight:700; margin-bottom:8px;">🛡️ 多层安全防护</div>
+                <div style="font-size:0.85rem; color:#b9c7f0;">危险命令拦截 · 文件访问守卫 · 技能安全扫描 · 本地部署数据私有</div>
+            </div>
+            <div style="background: #0a1022aa; border-radius: 28px; padding: 12px 20px; flex:1;">
+                <div style="font-weight:700; margin-bottom:8px;">🌐 多智能体协作 · 全域触达</div>
+                <div style="font-size:0.85rem; color:#b9c7f0;">Discord / Telegram / 飞书 / 钉钉 / 微信，智能体间互相通信完成复杂任务</div>
+            </div>
+        </div>
+
+        <!-- 联系方式 + 许可证 + 仓库 -->
+        <div class="contact-row">
+            <div class="badges-sm">
+                <span>🐙 GitHub仓库</span>
+                <span>🐍 Python 3.10~3.13</span>
+                <span>📄 Apache 2.0</span>
+                <span>🎨 Black风格</span>
+            </div>
+            <div class="qr-note">
+                <a href="#" class="dingtalk-btn">
+                    📱 钉钉群 · 加入社区
+                </a>
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                    <div style="width: 48px; height: 48px; background: #1f2a48; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size:24px;">🎵</div>
+                    <span style="font-size:10px; color:#7e8fc7;">抖音教程</span>
+                </div>
+            </div>
+        </div>
+        <div class="license-note" style="margin-top: 28px; text-align: center;">
+            ⚡ 永久免token基于Web模型调用技术，不消耗云端API。iClaw 二次开发基于 CoPaw (Apache 2.0) | 如有源码需求请联系钉钉iclaw001
+        </div>
+    </div>
+    <div class="corner-accent"></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+import Bubble from "./Bubble";
+import List from "./BubbleList";
+import Spin from "./Spin";
+import Footer from "./Footer";
+import Interrupted from "./Interrupted";
+Bubble.List = List;
+Bubble.Spin = Spin;
+Bubble.Footer = Footer;
+Bubble.Interrupted = Interrupted;
+export default Bubble;

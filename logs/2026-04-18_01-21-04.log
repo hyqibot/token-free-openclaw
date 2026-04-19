@@ -1,0 +1,143 @@
+2026-04-18 01:21:04 | INFO | application.py:148 | start | Init ReMe with config: {"backend":"","app_name":"ReMe","working_dir":"C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1","enable_logo":false,"language":"","thread_pool_max_workers":-1,"ray_max_workers":-1,"log_to_console":false,"disabled_flows":[],"enabled_flows":[],"mcp_servers":{},"mcp":{"transport":"stdio","host":"0.0.0.0","port":8001},"http":{"host":"0.0.0.0","port":8001,"timeout_keep_alive":3600,"limit_concurrency":1000},"cmd":{"flow":""},"ops":{},"flows":{},"as_llms":{"default":{"backend":"openai","model_name":"qwen3.5-plus"}},"as_llm_formatters":{"default":{"backend":"openai"}},"as_token_counters":{"default":{"backend":"rule","token_count_estimate_divisor":3.75}},"llms":{},"embedding_models":{"default":{"backend":"openai","model_name":"","dimensions":1024,"use_dimensions":false,"enable_cache":true,"max_batch_size":10,"max_cache_size":3000,"max_input_length":8192,"api_key":"","base_url":""}},"vector_stores":{},"file_stores":{"default":{"backend":"local","embedding_model":"default","store_name":"copaw","vector_enabled":false,"fts_enabled":true}},"token_counters":{},"file_watchers":{"default":{"backend":"full","file_store":"default","watch_paths":["C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1\\MEMORY.md","C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1\\memory.md","C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1\\memory"],"suffix_filters":[".md"],"recursive":false,"rebuild_index_on_start":false}},"metadata":{}}
+2026-04-18 01:21:04 | INFO | application.py:167 | start | Thread pool is disabled (thread_pool_max_workers <= 0)
+2026-04-18 01:21:04 | INFO | base_embedding_model.py:158 | _load_cache | No cache file found at C:\Users\hahay\.copaw\workspaces\CoPaw_QA_Agent_0.1beta1\embedding_cache\embedding_cache.jsonl, starting with empty cache
+2026-04-18 01:21:04 | INFO | local_file_store.py:121 | start | LocalFileStore 'copaw' ready: 0 chunks, metadata at C:\Users\hahay\.copaw\workspaces\CoPaw_QA_Agent_0.1beta1\file_store\copaw_file_metadata.json
+2026-04-18 01:21:04 | INFO | base_file_watcher.py:89 | start | Started watching: ['C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1\\MEMORY.md', 'C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1\\memory.md', 'C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1\\memory']
+2026-04-18 01:21:04 | INFO | application.py:277 | start | ReMe Application started
+2026-04-18 01:21:04 | INFO | base_file_watcher.py:183 | _watch_loop | Starting watch on valid paths: ['C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1\\MEMORY.md', 'C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1\\memory.md', 'C:\\Users\\hahay\\.copaw\\workspaces\\CoPaw_QA_Agent_0.1beta1\\memory']
+2026-04-18 01:22:16 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:22:16 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001772s ==========
+2026-04-18 01:22:16 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:22:16 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.013907s ==========
+2026-04-18 01:22:16 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:22:16 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001585s ==========
+2026-04-18 01:22:16 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:22:16 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.011546s ==========
+2026-04-18 01:23:41 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:23:41 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.002588s ==========
+2026-04-18 01:23:41 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:23:41 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.008624s ==========
+2026-04-18 01:23:41 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:23:41 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001898s ==========
+2026-04-18 01:23:41 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:23:41 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.011970s ==========
+2026-04-18 01:23:47 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:23:47 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001536s ==========
+2026-04-18 01:23:47 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:23:47 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.010504s ==========
+2026-04-18 01:23:47 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:23:47 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001763s ==========
+2026-04-18 01:23:47 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:23:47 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.010572s ==========
+2026-04-18 01:23:55 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:23:55 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.006569s ==========
+2026-04-18 01:23:55 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:23:55 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.030730s ==========
+2026-04-18 01:23:55 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:23:55 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.003945s ==========
+2026-04-18 01:23:55 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:23:55 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.030581s ==========
+2026-04-18 01:24:41 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:24:41 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001662s ==========
+2026-04-18 01:24:41 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:24:41 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.012052s ==========
+2026-04-18 01:24:41 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:24:41 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001610s ==========
+2026-04-18 01:24:41 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:24:42 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.612259s ==========
+2026-04-18 01:26:01 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:26:01 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001720s ==========
+2026-04-18 01:26:01 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:26:01 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.010394s ==========
+2026-04-18 01:26:01 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:26:01 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001796s ==========
+2026-04-18 01:26:01 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:26:01 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.013290s ==========
+2026-04-18 01:26:44 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:26:44 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001786s ==========
+2026-04-18 01:26:44 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:26:44 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.010899s ==========
+2026-04-18 01:26:44 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:26:44 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001589s ==========
+2026-04-18 01:26:44 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:26:44 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.010130s ==========
+2026-04-18 01:27:16 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:27:16 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001835s ==========
+2026-04-18 01:27:16 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:27:16 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.015516s ==========
+2026-04-18 01:27:16 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:27:16 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001572s ==========
+2026-04-18 01:27:16 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:27:16 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.012867s ==========
+2026-04-18 01:27:35 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:27:35 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001989s ==========
+2026-04-18 01:27:35 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:27:35 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.014195s ==========
+2026-04-18 01:27:36 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:27:36 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001832s ==========
+2026-04-18 01:27:36 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:27:36 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.013190s ==========
+2026-04-18 01:28:18 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:28:18 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.005550s ==========
+2026-04-18 01:28:18 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:28:18 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.015701s ==========
+2026-04-18 01:28:18 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:28:18 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001920s ==========
+2026-04-18 01:28:18 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:28:18 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.009464s ==========
+2026-04-18 01:28:52 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:28:52 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001843s ==========
+2026-04-18 01:28:52 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:28:52 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.013693s ==========
+2026-04-18 01:28:52 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:28:52 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001597s ==========
+2026-04-18 01:28:52 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:28:52 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.014473s ==========
+2026-04-18 01:29:15 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:29:15 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001615s ==========
+2026-04-18 01:29:15 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:29:15 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.016254s ==========
+2026-04-18 01:29:15 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:29:15 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001646s ==========
+2026-04-18 01:29:15 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:29:15 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.013926s ==========
+2026-04-18 01:29:53 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:29:53 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001869s ==========
+2026-04-18 01:29:53 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:29:53 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.014355s ==========
+2026-04-18 01:29:53 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:29:53 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.002087s ==========
+2026-04-18 01:29:53 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:29:53 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.016819s ==========
+2026-04-18 01:30:54 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:30:54 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.002409s ==========
+2026-04-18 01:30:54 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:30:54 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.014979s ==========
+2026-04-18 01:30:54 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:30:54 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.002604s ==========
+2026-04-18 01:30:54 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:30:54 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.024620s ==========
+2026-04-18 01:31:14 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:31:14 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001800s ==========
+2026-04-18 01:31:14 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:31:14 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.010581s ==========
+2026-04-18 01:31:14 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:31:14 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.002042s ==========
+2026-04-18 01:31:14 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:31:14 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.014082s ==========
+2026-04-18 01:31:40 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:31:40 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.002058s ==========
+2026-04-18 01:31:40 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:31:40 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.014582s ==========
+2026-04-18 01:31:40 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:31:40 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001933s ==========
+2026-04-18 01:31:40 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:31:40 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.013692s ==========
+2026-04-18 01:32:34 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:32:34 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001643s ==========
+2026-04-18 01:32:34 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:32:34 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.014779s ==========
+2026-04-18 01:32:34 | INFO | tool_result_compactor.py:113 | execute | md_file_tool_ids: {'call_mo2taesh_0', 'call_mo19p0oy_0', 'call_mo0mmmsh', 'call_mo2sz1pb_1', 'call_mo36gj5b_0', 'call_mo2sqkf3_1', 'call_mo0mmi0r', 'call_mo0mmkal', 'call_mo17k0bs', 'call_mo17jpxs', 'call_mo0mmu44', 'tool-bfa4a3e9c5124bc6b71e36ab54c428e0', 'call_mo0mnk4k', 'call_mo0mmxg7'}
+2026-04-18 01:32:34 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ToolResultCompactor.call | ========== cost=0.001604s ==========
+2026-04-18 01:32:34 | WARNING | as_msg_handler.py:185 | stat_message | Unsupported block type file, skipped.
+2026-04-18 01:32:34 | INFO | D:\copawmainforrun\reme\core\op\base_op.py:287 | ContextChecker.call | ========== cost=0.013881s ==========

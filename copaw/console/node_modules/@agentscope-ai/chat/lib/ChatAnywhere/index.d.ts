@@ -1,0 +1,12 @@
+import React from 'react';
+import { v4 as uuid } from 'uuid';
+import { ChatAnywhereRef, useChatAnywhere } from './hooks/ChatAnywhereProvider';
+import { IChatAnywhereConfig } from './hooks/types';
+import { useMessages } from './hooks/useMessages';
+import { useInput } from './hooks/useInput';
+import { useSessionList } from './hooks/useSessionList';
+export type { ChatAnywhereRef };
+export { uuid, useChatAnywhere, useMessages, useInput, useSessionList };
+export type { TMessage, TSession } from './hooks/types';
+declare const _default: React.ForwardRefExoticComponent<IChatAnywhereConfig & React.RefAttributes<unknown>>;
+export default _default;

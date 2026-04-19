@@ -1,0 +1,28 @@
+Metadata-Version: 2.4
+Name: a2a
+Version: 0.44
+Summary: Finds corresponding service offerings in Microsoft Azure and Amazon AWS .
+Home-page: https://github.com/kshitijcode/a2a
+Download-URL: https://github.com/kshitijcode/a2a/archive/v0.43.tar.gz
+Author: Kshitij Sharma
+Author-email: ikshitijsharma@gmail.com
+License: MIT
+Keywords: aws,service,mapping,map,aws,amazon
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Build Tools
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Requires-Dist: scrapy
+Requires-Dist: tabulate
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: download-url
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: requires-dist
+Dynamic: summary

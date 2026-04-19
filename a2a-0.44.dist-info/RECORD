@@ -1,0 +1,11 @@
+../../Scripts/a2a.exe,sha256=SrrjEaO9C7PiKpLRdMAK0HfbkcjyFzDcehgkLRnYuUk,108331
+a2a-0.44.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+a2a-0.44.dist-info/METADATA,sha256=VzsB8CAXBhGreZgQG0819JjPnnyGQlsic5TcOJr0t4Q,963
+a2a-0.44.dist-info/RECORD,,
+a2a-0.44.dist-info/WHEEL,sha256=aeYiig01lYGDzBgS8HxWXOg3uV61G9ijOsup-k9o1sk,91
+a2a-0.44.dist-info/entry_points.txt,sha256=gTwmKrRT8ss5D-wMjftv-ORhnC6JoMrRwKtab_A3518,42
+a2a-0.44.dist-info/top_level.txt,sha256=pbQksRthEdOQgyCXdoQvPD3NUnK3onFlWhh_Pom6ug0,4
+a2a/__init__.py,sha256=DjQBXBumEWsVjfBpZLM-676khVVzHConJVm9MqCwWdI,35
+a2a/__pycache__/__init__.cpython-310.pyc,,
+a2a/__pycache__/runner.cpython-310.pyc,,
+a2a/runner.py,sha256=Ez-oY9q7uY9JIFDV9ZJqzLCjLcIB-ATTimEK8_fTtkU,1890

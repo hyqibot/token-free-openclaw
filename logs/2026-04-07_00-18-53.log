@@ -1,0 +1,22 @@
+2026-04-07 00:18:54 | INFO | application.py:133 | start | Init ReMe with config: {"backend":"","app_name":"ReMe","working_dir":"C:\\Users\\hahay\\.copaw","enable_logo":false,"language":"","thread_pool_max_workers":16,"ray_max_workers":-1,"log_to_console":false,"disabled_flows":[],"enabled_flows":[],"mcp_servers":{},"mcp":{"transport":"stdio","host":"0.0.0.0","port":8001},"http":{"host":"0.0.0.0","port":8001,"timeout_keep_alive":3600,"limit_concurrency":1000},"cmd":{"flow":""},"ops":{},"flows":{},"as_llms":{"default":{"backend":"openai","model_name":"qwen3.5-plus"}},"as_llm_formatters":{"default":{"backend":"openai"}},"llms":{},"embedding_models":{"default":{"backend":"openai","model_name":"","dimensions":1024,"use_dimensions":false,"enable_cache":true,"max_batch_size":10,"max_cache_size":2000,"max_input_length":8192}},"vector_stores":{},"file_stores":{"default":{"backend":"local","embedding_model":"default","store_name":"copaw","vector_enabled":false,"fts_enabled":true}},"token_counters":{},"file_watchers":{"default":{"backend":"full","file_store":"default","watch_paths":["C:\\Users\\hahay\\.copaw\\MEMORY.md","C:\\Users\\hahay\\.copaw\\memory.md","C:\\Users\\hahay\\.copaw\\memory"],"suffix_filters":[".md"],"recursive":false,"scan_on_start":true}},"metadata":{}}
+2026-04-07 00:18:54 | INFO | base_embedding_model.py:169 | _load_cache | No cache file found at C:\Users\hahay\.copaw\embedding_cache\embedding_cache.jsonl, starting with empty cache
+2026-04-07 00:18:54 | INFO | local_file_store.py:121 | start | LocalFileStore 'copaw' ready: 0 chunks, metadata at C:\Users\hahay\.copaw\file_store\copaw_file_metadata.json
+2026-04-07 00:18:54 | INFO | base_file_watcher.py:137 | _scan_existing_files | [SCAN_ON_START] Found 2 existing files matching watch criteria
+2026-04-07 00:18:54 | INFO | local_file_store.py:461 | clear_all | Cleared all data from LocalFileStore 'copaw'
+2026-04-07 00:18:54 | INFO | full_file_watcher.py:67 | _on_changes | delete_file C:\Users\hahay\.copaw\MEMORY.md
+2026-04-07 00:18:54 | INFO | full_file_watcher.py:70 | _on_changes | Upserted 1 chunks for C:\Users\hahay\.copaw\MEMORY.md
+2026-04-07 00:18:54 | INFO | full_file_watcher.py:79 | _on_changes | File 1 changed: C:\Users\hahay\.copaw\MEMORY.md
+2026-04-07 00:18:54 | INFO | full_file_watcher.py:67 | _on_changes | delete_file C:\Users\hahay\.copaw\memory.md
+2026-04-07 00:18:54 | INFO | full_file_watcher.py:70 | _on_changes | Upserted 1 chunks for C:\Users\hahay\.copaw\memory.md
+2026-04-07 00:18:54 | INFO | full_file_watcher.py:79 | _on_changes | File 1 changed: C:\Users\hahay\.copaw\memory.md
+2026-04-07 00:18:54 | INFO | base_file_watcher.py:212 | on_changes | [FullFileWatcher] on_changes: {(<Change.added: 1>, 'C:\\Users\\hahay\\.copaw\\MEMORY.md'), (<Change.added: 1>, 'C:\\Users\\hahay\\.copaw\\memory.md')}
+2026-04-07 00:18:54 | INFO | base_file_watcher.py:139 | _scan_existing_files | [SCAN_ON_START] Added 2 files to memory store
+2026-04-07 00:18:54 | INFO | base_file_watcher.py:147 | _scan_existing_files | Found existing file: C:\Users\hahay\.copaw\MEMORY.md, 1 chunks
+2026-04-07 00:18:54 | INFO | base_file_watcher.py:147 | _scan_existing_files | Found existing file: C:\Users\hahay\.copaw\memory.md, 1 chunks
+2026-04-07 00:18:54 | INFO | base_file_watcher.py:82 | start | Started watching: ['C:\\Users\\hahay\\.copaw\\MEMORY.md', 'C:\\Users\\hahay\\.copaw\\memory.md', 'C:\\Users\\hahay\\.copaw\\memory']
+2026-04-07 00:18:54 | INFO | application.py:267 | close | Closing file store: default
+2026-04-07 00:18:54 | INFO | application.py:271 | close | Closing file watcher: default
+2026-04-07 00:18:54 | INFO | base_file_watcher.py:93 | close | Stopped watching
+2026-04-07 00:18:54 | INFO | application.py:279 | close | Closing embedding model: default
+2026-04-07 00:18:54 | INFO | base_embedding_model.py:233 | _save_cache | Attempting to save cache, current size: 0
+2026-04-07 00:18:54 | INFO | base_embedding_model.py:235 | _save_cache | Cache is empty, skipping save

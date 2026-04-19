@@ -1,0 +1,2 @@
+[console_scripts]
+a2a = a2a.runner:runner

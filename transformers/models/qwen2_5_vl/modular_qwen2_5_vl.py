@@ -1,0 +1,955 @@
+# Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""PyTorch Qwen2.5-VL model."""
+
+import itertools
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ...video_utils import VideoInput
+from ..llama.modeling_llama import LlamaRMSNorm
+from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
+from ..qwen2_vl.modeling_qwen2_vl import (
+    PatchEmbed,
+    PatchMerger,
+    Qwen2VLCausalLMOutputWithPast,
+    Qwen2VLForConditionalGeneration,
+    Qwen2VLModel,
+    Qwen2VLModelOutputWithPast,
+    Qwen2VLPreTrainedModel,
+    TransformersKwargs,
+    VisionAttention,
+    VisionRotaryEmbedding,
+)
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+
+
+logger = logging.get_logger(__name__)
+
+
+class Qwen2_5_VLVisionConfig(PreTrainedConfig):
+    model_type = "qwen2_5_vl"
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        depth=32,
+        hidden_size=3584,
+        hidden_act="silu",
+        intermediate_size=3420,
+        num_heads=16,
+        in_channels=3,
+        patch_size=14,
+        spatial_merge_size=2,
+        temporal_patch_size=2,
+        tokens_per_second=4,
+        window_size=112,
+        out_hidden_size=3584,
+        fullatt_block_indexes=[7, 15, 23, 31],
+        initializer_range=0.02,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.depth = depth
+        self.hidden_size = hidden_size
+        self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
+        self.num_heads = num_heads
+        self.in_channels = in_channels
+        self.patch_size = patch_size
+        self.spatial_merge_size = spatial_merge_size
+        self.temporal_patch_size = temporal_patch_size
+        self.tokens_per_second = tokens_per_second
+        self.window_size = window_size
+        self.fullatt_block_indexes = fullatt_block_indexes
+        self.out_hidden_size = out_hidden_size
+        self.initializer_range = initializer_range
+
+
+class Qwen2_5_VLTextConfig(Qwen2VLTextConfig):
+    model_type = "qwen2_5_vl_text"
+
+
+class Qwen2_5_VLConfig(Qwen2VLConfig):
+    model_type = "qwen2_5_vl"
+    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig, "text_config": Qwen2_5_VLTextConfig}
+
+
+class Qwen2_5_VLRMSNorm(LlamaRMSNorm):
+    pass
+
+
+class Qwen2_5_VLMLP(nn.Module):
+    def __init__(self, config, bias: bool = False):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_state):
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+
+
+class Qwen2_5_VisionPatchEmbed(PatchEmbed):
+    pass
+
+
+class Qwen2_5_VisionRotaryEmbedding(VisionRotaryEmbedding):
+    pass
+
+
+class Qwen2_5_VLPatchMerger(PatchMerger):
+    def __init__(self, dim: int, context_dim: int, spatial_merge_size: int = 2) -> None:
+        super().__init__(dim, context_dim, spatial_merge_size)
+        self.ln_q = Qwen2_5_VLRMSNorm(context_dim, eps=1e-6)
+
+
+class Qwen2_5_VLVisionAttention(VisionAttention):
+    def __init__(self, config: Qwen2_5_VLVisionConfig) -> None:
+        super().__init__(config)
+        self.dim = config.hidden_size
+
+
+class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
+    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
+        super().__init__()
+        self.norm1 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
+        self.norm2 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
+        self.attn = Qwen2_5_VLVisionAttention(config=config)
+        self.mlp = Qwen2_5_VLMLP(config, bias=True)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        hidden_states = hidden_states + self.attn(
+            self.norm1(hidden_states),
+            cu_seqlens=cu_seqlens,
+            rotary_pos_emb=rotary_pos_emb,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        return hidden_states
+
+
+class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Qwen2_5_VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
+
+class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
+    config: Qwen2_5_VLVisionConfig
+    _no_split_modules = ["Qwen2_5_VLVisionBlock"]
+    _input_embed_layer = "patch_embed"
+    _can_record_outputs = {
+        "hidden_states": Qwen2_5_VLVisionBlock,
+        "attentions": Qwen2_5_VLVisionAttention,
+    }
+
+    def __init__(self, config, *inputs, **kwargs) -> None:
+        super().__init__(config, *inputs, **kwargs)
+        self.spatial_merge_size = config.spatial_merge_size
+        self.patch_size = config.patch_size
+        self.fullatt_block_indexes = config.fullatt_block_indexes
+        self.window_size = config.window_size
+        self.spatial_merge_unit = self.spatial_merge_size * self.spatial_merge_size
+
+        self.patch_embed = Qwen2_5_VisionPatchEmbed(
+            patch_size=config.patch_size,
+            temporal_patch_size=config.temporal_patch_size,
+            in_channels=config.in_channels,
+            embed_dim=config.hidden_size,
+        )
+
+        head_dim = config.hidden_size // config.num_heads
+        self.rotary_pos_emb = Qwen2_5_VisionRotaryEmbedding(head_dim // 2)
+
+        self.blocks = nn.ModuleList([Qwen2_5_VLVisionBlock(config) for _ in range(config.depth)])
+        self.merger = Qwen2_5_VLPatchMerger(
+            dim=config.out_hidden_size,
+            context_dim=config.hidden_size,
+            spatial_merge_size=config.spatial_merge_size,
+        )
+        self.gradient_checkpointing = False
+
+        self.post_init()
+
+    def rot_pos_emb(self, grid_thw):
+        pos_ids = []
+        for t, h, w in grid_thw.tolist():
+            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
+            hpos_ids = hpos_ids.reshape(
+                h // self.spatial_merge_size,
+                self.spatial_merge_size,
+                w // self.spatial_merge_size,
+                self.spatial_merge_size,
+            )
+            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
+            hpos_ids = hpos_ids.flatten()
+
+            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
+            wpos_ids = wpos_ids.reshape(
+                h // self.spatial_merge_size,
+                self.spatial_merge_size,
+                w // self.spatial_merge_size,
+                self.spatial_merge_size,
+            )
+            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
+            wpos_ids = wpos_ids.flatten()
+            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+        pos_ids = torch.cat(pos_ids, dim=0)
+        max_grid_size = grid_thw[:, 1:].max()
+        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
+        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
+        return rotary_pos_emb
+
+    def get_window_index(self, grid_thw):
+        window_index: list = []
+        cu_window_seqlens: list = [0]
+        window_index_id = 0
+        vit_merger_window_size = self.window_size // self.spatial_merge_size // self.patch_size
+        grid_thw_list = grid_thw.tolist()
+
+        for grid_t, grid_h, grid_w in grid_thw_list:
+            llm_grid_h, llm_grid_w = (
+                grid_h // self.spatial_merge_size,
+                grid_w // self.spatial_merge_size,
+            )
+            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(grid_t, llm_grid_h, llm_grid_w)
+            pad_h = vit_merger_window_size - llm_grid_h % vit_merger_window_size
+            pad_w = vit_merger_window_size - llm_grid_w % vit_merger_window_size
+            num_windows_h = (llm_grid_h + pad_h) // vit_merger_window_size
+            num_windows_w = (llm_grid_w + pad_w) // vit_merger_window_size
+            index_padded = F.pad(index, (0, pad_w, 0, pad_h), "constant", -100)
+            index_padded = index_padded.reshape(
+                grid_t,
+                num_windows_h,
+                vit_merger_window_size,
+                num_windows_w,
+                vit_merger_window_size,
+            )
+            index_padded = index_padded.permute(0, 1, 3, 2, 4).reshape(
+                grid_t,
+                num_windows_h * num_windows_w,
+                vit_merger_window_size,
+                vit_merger_window_size,
+            )
+            seqlens = (index_padded != -100).sum([2, 3]).reshape(-1)
+            index_padded = index_padded.reshape(-1)
+            index_new = index_padded[index_padded != -100]
+            window_index.append(index_new + window_index_id)
+            cu_seqlens_tmp = seqlens.cumsum(0) * self.spatial_merge_unit + cu_window_seqlens[-1]
+            cu_window_seqlens.extend(cu_seqlens_tmp.tolist())
+            window_index_id += grid_t * llm_grid_h * llm_grid_w
+        window_index = torch.cat(window_index, dim=0)
+
+        return window_index, cu_window_seqlens
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+                The final hidden states of the model.
+            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width of feature shape of each image in LLM.
+
+        Returns:
+            `torch.Tensor`: hidden_states.
+        """
+        hidden_states = self.patch_embed(hidden_states)
+        rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        window_index, cu_window_seqlens = self.get_window_index(grid_thw)
+        cu_window_seqlens = torch.tensor(
+            cu_window_seqlens,
+            device=hidden_states.device,
+            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        )
+        cu_window_seqlens = torch.unique_consecutive(cu_window_seqlens)
+
+        seq_len, _ = hidden_states.size()
+        hidden_states = hidden_states.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        hidden_states = hidden_states[window_index, :, :]
+        hidden_states = hidden_states.reshape(seq_len, -1)
+        rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        rotary_pos_emb = rotary_pos_emb[window_index, :, :]
+        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
+
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0,
+            # Select dtype based on the following factors:
+            #  - FA2 requires that cu_seqlens_q must have dtype int32
+            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+            # See https://github.com/huggingface/transformers/pull/34852 for more information
+            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        )
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+
+        for layer_num, blk in enumerate(self.blocks):
+            if layer_num in self.fullatt_block_indexes:
+                cu_seqlens_now = cu_seqlens
+            else:
+                cu_seqlens_now = cu_window_seqlens
+
+            hidden_states = blk(
+                hidden_states,
+                cu_seqlens=cu_seqlens_now,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        merged_hidden_states = self.merger(hidden_states)
+        reverse_indices = torch.argsort(window_index)
+        merged_hidden_states = merged_hidden_states[reverse_indices, :]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+        )
+
+
+class Qwen2_5_VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
+    pass
+
+
+class Qwen2_5_VLModel(Qwen2VLModel):
+    config: Qwen2_5_VLConfig
+    base_model_prefix = "model"
+    _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
+
+    def get_rope_index(
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        second_per_grid_ts: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
+        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
+        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
+        while text tokens use standard 1D RoPE.
+
+        Example:
+            Temporal patches: 3; Height patches: 2; Width patches: 2
+            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
+
+            Temporal position IDs are spaced by:
+                `interval = tokens_per_second * temporal_patch_size / fps`
+
+                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
+                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
+
+            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
+            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
+            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+                The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
+        spatial_merge_size = self.config.vision_config.spatial_merge_size
+        tokens_per_second = self.config.vision_config.tokens_per_second
+
+        mrope_position_deltas = []
+        position_ids = torch.zeros(
+            3,
+            input_ids.shape[0],
+            input_ids.shape[1],
+            dtype=input_ids.dtype,
+            device=input_ids.device,
+        )
+        grid_iters = {
+            1: iter(image_grid_thw) if image_grid_thw is not None else None,
+            2: iter(video_grid_thw) if video_grid_thw is not None else None,
+        }
+        second_per_grid_ts = (
+            iter(second_per_grid_ts) if second_per_grid_ts is not None else iter([1] * input_ids.shape[1])
+        )
+        for batch_idx, current_input_ids in enumerate(input_ids):
+            input_token_type = mm_token_type_ids[batch_idx]
+            if attention_mask is not None:
+                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
+                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
+
+            input_type_group = []
+            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
+                group = list(group)
+                start_index = group[0][0]
+                end_index = group[-1][0] + 1
+                input_type_group.append((key, start_index, end_index))
+
+            current_pos = 0
+            llm_pos_ids_list = []
+            for modality_type, start_idx, end_idx in input_type_group:
+                # text == 0
+                if modality_type == 0:
+                    text_len = end_idx - start_idx
+                    llm_pos_ids_list.append(
+                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
+                    )
+                    current_pos += text_len
+                # image == 1, video == 2
+                else:
+                    grid_thw = next(grid_iters[modality_type])
+                    time_interval = tokens_per_second * int(next(second_per_grid_ts))
+                    vision_position_ids = self.get_vision_position_ids(
+                        current_pos, grid_thw, 1, spatial_merge_size, time_interval, device=input_ids.device
+                    )
+                    llm_pos_ids_list.append(vision_position_ids)
+                    current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
+            llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
+            if attention_mask is not None:
+                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
+            else:
+                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
+            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
+        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+        return position_ids, mrope_position_deltas
+
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.Tensor | None,
+        image_grid_thw: torch.Tensor | None,
+        video_grid_thw: torch.Tensor | None,
+        inputs_embeds: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: torch.Tensor | None,
+        second_per_grid_ts: torch.Tensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+    ) -> torch.Tensor | None:
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        can_compute_mrope = (
+            input_ids is not None
+            and mm_token_type_ids is not None
+            and (image_grid_thw is not None or video_grid_thw is not None)
+        )
+
+        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+            position_ids, rope_deltas = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                attention_mask=attention_mask,
+                second_per_grid_ts=second_per_grid_ts,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            self.rope_deltas = rope_deltas
+        # Use pre-calculated rope-deltas to infer correct 3D position ids
+        elif self.rope_deltas is not None:
+            batch_size, seq_length, _ = inputs_embeds.shape
+            if attention_mask is not None:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
+            else:
+                position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
+            delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
+            position_ids = position_ids + delta.to(device=position_ids.device)
+        else:
+            # Can't build correct 3D positions. Let the model infer it from `cache_position`
+            position_ids = None
+        return position_ids
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        rope_deltas: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        second_per_grid_ts: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Qwen2_5_VLModelOutputWithPast:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+        """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                second_per_grid_ts=second_per_grid_ts,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        output = Qwen2_5_VLModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            rope_deltas=self.rope_deltas,
+        )
+        return output if return_dict else output.to_tuple()
+
+
+class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
+    pass
+
+
+class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        rope_deltas: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        second_per_grid_ts: torch.Tensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Qwen2_5_VLCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+
+        >>> model = Qwen2_5_VLForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+
+        >>> messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                    },
+                    {"type": "text", "text": "Describe the image."},
+                ],
+            }
+        ]
+
+        >>> inputs = processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
+
+        >>> # Generate
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=1024)
+        >>> generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
+        >>> output_text = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> print(output_text)
+        ```
+        """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            second_per_grid_ts=second_per_grid_ts,
+            mm_token_type_ids=mm_token_type_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return Qwen2_5_VLCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            rope_deltas=outputs.rope_deltas,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        second_per_grid_ts=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            second_per_grid_ts=second_per_grid_ts,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+
+        return model_inputs
+
+
+class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": True,
+        },
+        "videos_kwargs": {"return_metadata": True},
+    }
+
+
+class Qwen2_5_VLProcessor(Qwen2VLProcessor):
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        video_processor_input_names = self.video_processor.model_input_names
+        names_from_processor = list(
+            dict.fromkeys(tokenizer_input_names + image_processor_input_names + video_processor_input_names)
+        )
+        return names_from_processor + ["second_per_grid_ts", "mm_token_type_ids"]
+
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        videos: VideoInput | None = None,
+        **kwargs: Unpack[Qwen2_5_VLProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
+            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
+            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
+            - **second_per_grid_ts** -- List of video seconds per time grid. Returned when `videos` is not `None`.
+        """
+        output_kwargs = self._merge_kwargs(
+            Qwen2_5_VLProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        image_inputs = videos_inputs = {}
+        if images is not None:
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            image_grid_thw = image_inputs["image_grid_thw"]
+
+        if videos is not None:
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            video_grid_thw = videos_inputs["video_grid_thw"]
+
+            # Get video metadata
+            if not kwargs.get("return_metadata"):
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
+
+            fps = [metadata.sampled_fps for metadata in video_metadata]
+
+            if isinstance(fps, (int, float)):
+                second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
+            elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
+                second_per_grid_ts = [self.video_processor.temporal_patch_size / tmp for tmp in fps]
+            else:
+                raise ValueError(
+                    f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
+                )
+            videos_inputs.update({"second_per_grid_ts": second_per_grid_ts})
+
+        if not isinstance(text, list):
+            text = [text]
+
+        text = text.copy()  # below lines change text in-place
+        if images is not None:
+            merge_length = self.image_processor.merge_size**2
+            index = 0
+            for i in range(len(text)):
+                while self.image_token in text[i]:
+                    num_image_tokens = image_grid_thw[index].prod() // merge_length
+                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+                    index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+
+        if videos is not None:
+            merge_length = self.video_processor.merge_size**2
+            index = 0
+            for i in range(len(text)):
+                while self.video_token in text[i]:
+                    num_video_tokens = video_grid_thw[index].prod() // merge_length
+                    text[i] = text[i].replace(self.video_token, "<|placeholder|>" * num_video_tokens, 1)
+                    index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[array_ids == self.video_token_id] = 2
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Qwen2_5_VLProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Qwen2_5_VLProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            num_video_patches = [
+                self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
+                for video_size in video_sizes
+            ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
+
+
+__all__ = [
+    "Qwen2_5_VLConfig",
+    "Qwen2_5_VLTextConfig",
+    "Qwen2_5_VLForConditionalGeneration",
+    "Qwen2_5_VLModel",
+    "Qwen2_5_VLPreTrainedModel",
+    "Qwen2_5_VLProcessor",
+    "Qwen2_5_VLTextModel",  # noqa: F822
+]
