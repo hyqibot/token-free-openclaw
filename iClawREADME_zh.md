@@ -139,9 +139,9 @@ iClaw 内置多层安全防护机制，保障你的数据与系统安全：
 
 [<img src="https://img.alicdn.com/imgextra/i2/O1CN01vCWI8a1skHtLGXEMQ_!!6000000005804-2-tps-458-460.png" width="80" height="80" alt="钉钉">](https://qr.dingtalk.com/action/joingroup?code=v1,k1,9O3Nk5uBqF+FKGHas0gK4dkuLhC1CkMJ4CgU45rKMf8=&_dt_no_comment=1&origin=11)
 
-**抖音视频**：[抖音视频](https://uj22314052.jz.fkw.com/cn/view.jsp?fileID=ABUIABACGAAg6baTzwYo8Z_h8QQw5Qg42gg)
+**抖音视频**：[抖音视频](https://24083873.s21i.faiusr.com/2/ABUIABACGAAg6baTzwYo8Z_h8QQw5Qg42gg.jpg)
 
-[<img src="https://uj22314052.jz.fkw.com/cn/view.jsp?fileID=ABUIABACGAAg6baTzwYo8Z_h8QQw5Qg42gg" width="80" height="80" alt="抖音视频">](https://uj22314052.jz.fkw.com/cn/view.jsp?fileID=ABUIABACGAAg6baTzwYo8Z_h8QQw5Qg42gg)
+[<img src="https://24083873.s21i.faiusr.com/2/ABUIABACGAAg6baTzwYo8Z_h8QQw5Qg42gg.jpg" width="80" height="80" alt="抖音视频">](https://uj22314052.jz.fkw.com/cn/view.jsp?fileID=ABUIABACGAAg6baTzwYo8Z_h8QQw5Qg42gg)
 
 
 
