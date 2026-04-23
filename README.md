@@ -25,7 +25,7 @@
 
 > **核心特色：**
 >
-> **永久免 token 费** — 通过 Web 模型调用技术，实现调用各大热门模型全免费（不消耗云端 API token）。
+> **永久免 token 费** — 通过 Web 模型调用技术，实现调用各大热门模型全免费（不消耗API token）, ChatGPT、Claude、Gemini、DeepSeek、千问、豆包、Kimi、智谱清言均可免费。
 >
 > **支持微信、钉钉** — 支持微信、钉钉等多端接入控制。
 >
@@ -135,9 +135,9 @@ iClaw 内置多层安全防护机制，保障你的数据与系统安全：
 
 ## 联系我们
 
-**钉钉群**：[加入群聊](https://qr.dingtalk.com/action/joingroup?code=v1,k1,9O3Nk5uBqF+FKGHas0gK4dkuLhC1CkMJ4CgU45rKMf8=&_dt_no_comment=1&origin=11)
+**钉钉群**：[点击加入群聊](https://qr.dingtalk.com/action/joingroup?code=v1,k1,9O3Nk5uBqF+FKGHas0gK4dkuLhC1CkMJ4CgU45rKMf8=&_dt_no_comment=1&origin=11)
 
-[<img src="https://img.alicdn.com/imgextra/i2/O1CN01vCWI8a1skHtLGXEMQ_!!6000000005804-2-tps-458-460.png" width="80" height="80" alt="钉钉">](https://qr.dingtalk.com/action/joingroup?code=v1,k1,9O3Nk5uBqF+FKGHas0gK4dkuLhC1CkMJ4CgU45rKMf8=&_dt_no_comment=1&origin=11)
+[<img src="https://24083873.s21i.faiusr.com/2/ABUIABACGAAgsqupzwYo9f_8GzCSCTiiDA.jpg" width="80" height="80" alt="钉钉">]( https://qr.dingtalk.com/action/joingroup?code=v1,k1,NeLqw9EStiKFKGHas0gK4dkuLhC1CkMJmszN5Q+UAsA=&_dt_no_comment=1&origin=11)
 
 **抖音视频**：[抖音视频](https://24083873.s21i.faiusr.com/2/ABUIABACGAAg6baTzwYo8Z_h8QQw5Qg42gg.jpg)
 
