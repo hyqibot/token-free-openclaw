@@ -1,5 +1,5 @@
 # orm/mapper.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -296,6 +296,17 @@ class Mapper(
            particular primary key value. A "partial primary key" can occur if
            one has mapped to an OUTER JOIN, for example.
 
+           The :paramref:`.orm.Mapper.allow_partial_pks` parameter also
+           indicates to the ORM relationship lazy loader, when loading a
+           many-to-one related object, if a composite primary key that has
+           partial NULL values should result in an attempt to load from the
+           database, or if a load attempt is not necessary.
+
+           .. versionadded:: 2.0.36 :paramref:`.orm.Mapper.allow_partial_pks`
+              is consulted by the relationship lazy loader strategy, such that
+              when set to False, a SELECT for a composite primary key that
+              has partial NULL values will not be emitted.
+
         :param batch: Defaults to ``True``, indicating that save operations
            of multiple entities can be batched together for efficiency.
            Setting to False indicates
@@ -318,7 +329,7 @@ class Mapper(
 
                 class User(Base):
                     __table__ = user_table
-                    __mapper_args__ = {'column_prefix':'_'}
+                    __mapper_args__ = {"column_prefix": "_"}
 
            The above mapping will assign the ``user_id``, ``user_name``, and
            ``password`` columns to attributes named ``_user_id``,
@@ -442,7 +453,7 @@ class Mapper(
           mapping of the class to an alternate selectable, for loading
           only.
 
-         .. seealso::
+          .. seealso::
 
             :ref:`relationship_aliased_class` - the new pattern that removes
             the need for the :paramref:`_orm.Mapper.non_primary` flag.
@@ -534,14 +545,14 @@ class Mapper(
           base-most mapped :class:`.Table`::
 
             class Employee(Base):
-                __tablename__ = 'employee'
+                __tablename__ = "employee"
 
                 id: Mapped[int] = mapped_column(primary_key=True)
                 discriminator: Mapped[str] = mapped_column(String(50))
 
                 __mapper_args__ = {
-                    "polymorphic_on":discriminator,
-                    "polymorphic_identity":"employee"
+                    "polymorphic_on": discriminator,
+                    "polymorphic_identity": "employee",
                 }
 
           It may also be specified
@@ -550,17 +561,18 @@ class Mapper(
           approach::
 
             class Employee(Base):
-                __tablename__ = 'employee'
+                __tablename__ = "employee"
 
                 id: Mapped[int] = mapped_column(primary_key=True)
                 discriminator: Mapped[str] = mapped_column(String(50))
 
                 __mapper_args__ = {
-                    "polymorphic_on":case(
+                    "polymorphic_on": case(
                         (discriminator == "EN", "engineer"),
                         (discriminator == "MA", "manager"),
-                        else_="employee"),
-                    "polymorphic_identity":"employee"
+                        else_="employee",
+                    ),
+                    "polymorphic_identity": "employee",
                 }
 
           It may also refer to any attribute using its string name,
@@ -568,14 +580,14 @@ class Mapper(
           configurations::
 
                 class Employee(Base):
-                    __tablename__ = 'employee'
+                    __tablename__ = "employee"
 
                     id: Mapped[int] = mapped_column(primary_key=True)
                     discriminator: Mapped[str]
 
                     __mapper_args__ = {
                         "polymorphic_on": "discriminator",
-                        "polymorphic_identity": "employee"
+                        "polymorphic_identity": "employee",
                     }
 
           When setting ``polymorphic_on`` to reference an
@@ -591,6 +603,7 @@ class Mapper(
 
                 from sqlalchemy import event
                 from sqlalchemy.orm import object_mapper
+
 
                 @event.listens_for(Employee, "init", propagate=True)
                 def set_identity(instance, *arg, **kw):
@@ -1043,7 +1056,7 @@ class Mapper(
 
     """
 
-    primary_key: Tuple[Column[Any], ...]
+    primary_key: Tuple[ColumnElement[Any], ...]
     """An iterable containing the collection of :class:`_schema.Column`
     objects
     which comprise the 'primary key' of the mapped table, from the
@@ -2087,12 +2100,20 @@ class Mapper(
             "_configure_property(%s, %s)", key, prop_arg.__class__.__name__
         )
 
+        # early setup mode - don't assign any props, only
+        # ensure a Column is turned into a ColumnProperty.
+        # see #12858
+        early_setup = not hasattr(self, "_props")
+
         if not isinstance(prop_arg, MapperProperty):
             prop: MapperProperty[Any] = self._property_from_column(
-                key, prop_arg
+                key, prop_arg, early_setup
             )
         else:
             prop = prop_arg
+
+        if early_setup:
+            return prop
 
         if isinstance(prop, properties.ColumnProperty):
             col = self.persist_selectable.corresponding_column(prop.columns[0])
@@ -2342,16 +2363,17 @@ class Mapper(
 
     @util.preload_module("sqlalchemy.orm.descriptor_props")
     def _property_from_column(
-        self,
-        key: str,
-        column: KeyedColumnElement[Any],
+        self, key: str, column: KeyedColumnElement[Any], early_setup: bool
     ) -> ColumnProperty[Any]:
         """generate/update a :class:`.ColumnProperty` given a
         :class:`_schema.Column` or other SQL expression object."""
 
         descriptor_props = util.preloaded.orm_descriptor_props
 
-        prop = self._props.get(key)
+        if early_setup:
+            prop = None
+        else:
+            prop = self._props.get(key)
 
         if isinstance(prop, properties.ColumnProperty):
             return self._reconcile_prop_with_incoming_columns(
@@ -2541,7 +2563,7 @@ class Mapper(
         if spec == "*":
             mappers = list(self.self_and_descendants)
         elif spec:
-            mapper_set = set()
+            mapper_set: Set[Mapper[Any]] = set()
             for m in util.to_list(spec):
                 m = _class_to_mapper(m)
                 if not m.isa(self):
@@ -3248,14 +3270,9 @@ class Mapper(
         The resulting structure is a dictionary of columns mapped
         to lists of equivalent columns, e.g.::
 
-            {
-                tablea.col1:
-                    {tableb.col1, tablec.col1},
-                tablea.col2:
-                    {tabled.col2}
-            }
+            {tablea.col1: {tableb.col1, tablec.col1}, tablea.col2: {tabled.col2}}
 
-        """
+        """  # noqa: E501
         result: _EquivalentColumnMap = {}
 
         def visit_binary(binary):
@@ -3420,9 +3437,11 @@ class Mapper(
         return self.class_manager.mapper.base_mapper
 
     def _result_has_identity_key(self, result, adapter=None):
-        pk_cols: Sequence[ColumnClause[Any]] = self.primary_key
-        if adapter:
-            pk_cols = [adapter.columns[c] for c in pk_cols]
+        pk_cols: Sequence[ColumnElement[Any]]
+        if adapter is not None:
+            pk_cols = [adapter.columns[c] for c in self.primary_key]
+        else:
+            pk_cols = self.primary_key
         rk = result.keys()
         for col in pk_cols:
             if col not in rk:
@@ -3432,7 +3451,7 @@ class Mapper(
 
     def identity_key_from_row(
         self,
-        row: Optional[Union[Row[Any], RowMapping]],
+        row: Union[Row[Any], RowMapping],
         identity_token: Optional[Any] = None,
         adapter: Optional[ORMAdapter] = None,
     ) -> _IdentityKeyType[_O]:
@@ -3447,18 +3466,21 @@ class Mapper(
             for the "row" argument
 
         """
-        pk_cols: Sequence[ColumnClause[Any]] = self.primary_key
-        if adapter:
-            pk_cols = [adapter.columns[c] for c in pk_cols]
-
-        if hasattr(row, "_mapping"):
-            mapping = row._mapping  # type: ignore
+        pk_cols: Sequence[ColumnElement[Any]]
+        if adapter is not None:
+            pk_cols = [adapter.columns[c] for c in self.primary_key]
         else:
-            mapping = cast("Mapping[Any, Any]", row)
+            pk_cols = self.primary_key
+
+        mapping: RowMapping
+        if hasattr(row, "_mapping"):
+            mapping = row._mapping
+        else:
+            mapping = row  # type: ignore[assignment]
 
         return (
             self._identity_class,
-            tuple(mapping[column] for column in pk_cols),  # type: ignore
+            tuple(mapping[column] for column in pk_cols),
             identity_token,
         )
 
@@ -3728,14 +3750,15 @@ class Mapper(
 
         given::
 
-            class A:
-                ...
+            class A: ...
+
 
             class B(A):
                 __mapper_args__ = {"polymorphic_load": "selectin"}
 
-            class C(B):
-                ...
+
+            class C(B): ...
+
 
             class D(B):
                 __mapper_args__ = {"polymorphic_load": "selectin"}
@@ -4294,7 +4317,7 @@ def _dispose_registries(registries: Set[_RegistryType], cascade: bool) -> None:
         reg._new_mappers = False
 
 
-def reconstructor(fn):
+def reconstructor(fn: _Fn) -> _Fn:
     """Decorate a method as the 'reconstructor' hook.
 
     Designates a single method as the "reconstructor", an ``__init__``-like
@@ -4320,7 +4343,7 @@ def reconstructor(fn):
         :meth:`.InstanceEvents.load`
 
     """
-    fn.__sa_reconstructor__ = True
+    fn.__sa_reconstructor__ = True  # type: ignore[attr-defined]
     return fn
 
 
@@ -4354,7 +4377,7 @@ def validates(
      :func:`.validates` usage where only one validator should emit per
      attribute operation.
 
-     .. versionchanged:: 2.0.16 This paramter inadvertently defaulted to
+     .. versionchanged:: 2.0.16 This parameter inadvertently defaulted to
         ``False`` for releases 2.0.0 through 2.0.15.  Its correct default
         of ``True`` is restored in 2.0.16.
 

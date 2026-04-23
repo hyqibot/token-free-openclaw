@@ -1,16 +1,26 @@
-import os
 import sys
 import copy
 import platform
 import pytest
+from pathlib import Path
 
 import numpy as np
 
-from numpy.core.multiarray import typeinfo
+from numpy._core._type_aliases import c_names_dict as _c_names_dict
 from . import util
 
 wrap = None
 
+# Extend core typeinfo with CHARACTER to test dtype('c')
+c_names_dict = dict(
+    CHARACTER=np.dtype("c"),
+    **_c_names_dict
+)
+
+
+def get_testdir():
+    testroot = Path(__file__).resolve().parent / "src"
+    return  testroot / "array_from_pyobj"
 
 def setup_module():
     """
@@ -19,24 +29,11 @@ def setup_module():
     """
     global wrap
 
-    # Check compiler availability first
-    if not util.has_c_compiler():
-        pytest.skip("No C compiler available")
-
     if wrap is None:
-        config_code = """
-        config.add_extension('test_array_from_pyobj_ext',
-                             sources=['wrapmodule.c', 'fortranobject.c'],
-                             define_macros=[])
-        """
-        d = os.path.dirname(__file__)
         src = [
-            util.getpath("tests", "src", "array_from_pyobj", "wrapmodule.c"),
-            util.getpath("src", "fortranobject.c"),
-            util.getpath("src", "fortranobject.h"),
+            get_testdir() / "wrapmodule.c",
         ]
-        wrap = util.build_module_distutils(src, config_code,
-                                           "test_array_from_pyobj_ext")
+        wrap = util.build_meson(src, module_name = "test_array_from_pyobj_ext")
 
 
 def flags_info(arr):
@@ -56,6 +53,7 @@ def flags2names(flags):
             "NOTSWAPPED",
             "WRITEABLE",
             "WRITEBACKIFCOPY",
+            "UPDATEIFCOPY",
             "BEHAVED",
             "BEHAVED_RO",
             "CARRAY",
@@ -90,10 +88,7 @@ class Intent:
         return "Intent(%r)" % (self.intent_list)
 
     def is_intent(self, *names):
-        for name in names:
-            if name not in self.intent_list:
-                return False
-        return True
+        return all(name in self.intent_list for name in names)
 
     def is_intent_exact(self, *names):
         return len(self.intent_list) == len(names) and self.is_intent(*names)
@@ -116,6 +111,9 @@ _type_names = [
     "FLOAT",
     "DOUBLE",
     "CFLOAT",
+    "STRING1",
+    "STRING5",
+    "CHARACTER",
 ]
 
 _cast_dict = {"BOOL": ["BOOL"]}
@@ -139,9 +137,13 @@ _cast_dict["DOUBLE"] = _cast_dict["INT"] + ["UINT", "FLOAT", "DOUBLE"]
 
 _cast_dict["CFLOAT"] = _cast_dict["FLOAT"] + ["CFLOAT"]
 
+_cast_dict['STRING1'] = ['STRING1']
+_cast_dict['STRING5'] = ['STRING5']
+_cast_dict['CHARACTER'] = ['CHARACTER']
+
 # 32 bit system malloc typically does not provide the alignment required by
 # 16 byte long double types this means the inout intent cannot be satisfied
-# and several tests fail as the alignment flag can be randomly true or fals
+# and several tests fail as the alignment flag can be randomly true or false
 # when numpy gains an aligned allocator the tests could be enabled again
 #
 # Furthermore, on macOS ARM64, LONGDOUBLE is an alias for DOUBLE.
@@ -170,7 +172,7 @@ class Type:
         if isinstance(name, np.dtype):
             dtype0 = name
             name = None
-            for n, i in typeinfo.items():
+            for n, i in c_names_dict.items():
                 if not isinstance(i, type) and dtype0.type is i.type:
                     name = n
                     break
@@ -184,13 +186,32 @@ class Type:
 
     def _init(self, name):
         self.NAME = name.upper()
-        info = typeinfo[self.NAME]
-        self.type_num = getattr(wrap, "NPY_" + self.NAME)
+
+        if self.NAME == 'CHARACTER':
+            info = c_names_dict[self.NAME]
+            self.type_num = wrap.NPY_STRING
+            self.elsize = 1
+            self.dtype = np.dtype('c')
+        elif self.NAME.startswith('STRING'):
+            info = c_names_dict[self.NAME[:6]]
+            self.type_num = wrap.NPY_STRING
+            self.elsize = int(self.NAME[6:] or 0)
+            self.dtype = np.dtype(f'S{self.elsize}')
+        else:
+            info = c_names_dict[self.NAME]
+            self.type_num = getattr(wrap, 'NPY_' + self.NAME)
+            self.elsize = info.itemsize
+            self.dtype = np.dtype(info.type)
+
         assert self.type_num == info.num
-        self.dtype = np.dtype(info.type)
         self.type = info.type
-        self.elsize = info.bits / 8
         self.dtypechar = info.char
+
+    def __repr__(self):
+        return (f"Type({self.NAME})|type_num={self.type_num},"
+                f" dtype={self.dtype},"
+                f" type={self.type}, elsize={self.elsize},"
+                f" dtypechar={self.dtypechar}")
 
     def cast_types(self):
         return [self.__class__(_m) for _m in _cast_dict[self.NAME]]
@@ -199,33 +220,38 @@ class Type:
         return [self.__class__(_m) for _m in _type_names]
 
     def smaller_types(self):
-        bits = typeinfo[self.NAME].alignment
+        bits = c_names_dict[self.NAME].alignment
         types = []
         for name in _type_names:
-            if typeinfo[name].alignment < bits:
+            if c_names_dict[name].alignment < bits:
                 types.append(Type(name))
         return types
 
     def equal_types(self):
-        bits = typeinfo[self.NAME].alignment
+        bits = c_names_dict[self.NAME].alignment
         types = []
         for name in _type_names:
             if name == self.NAME:
                 continue
-            if typeinfo[name].alignment == bits:
+            if c_names_dict[name].alignment == bits:
                 types.append(Type(name))
         return types
 
     def larger_types(self):
-        bits = typeinfo[self.NAME].alignment
+        bits = c_names_dict[self.NAME].alignment
         types = []
         for name in _type_names:
-            if typeinfo[name].alignment > bits:
+            if c_names_dict[name].alignment > bits:
                 types.append(Type(name))
         return types
 
 
 class Array:
+
+    def __repr__(self):
+        return (f'Array({self.type}, {self.dims}, {self.intent},'
+                f' {self.obj})|arr={self.arr}')
+
     def __init__(self, typ, dims, intent, obj):
         self.type = typ
         self.dims = dims
@@ -234,7 +260,9 @@ class Array:
         self.obj = obj
 
         # arr.dtypechar may be different from typ.dtypechar
-        self.arr = wrap.call(typ.type_num, dims, intent.flags, obj)
+        self.arr = wrap.call(typ.type_num,
+                             typ.elsize,
+                             dims, intent.flags, obj)
 
         assert isinstance(self.arr, np.ndarray)
 
@@ -289,7 +317,9 @@ class Array:
                 self.arr.tobytes(),
                 self.pyarr.tobytes(),
             ))  # strides
-        assert self.arr_attr[5][-2:] == self.pyarr_attr[5][-2:]  # descr
+        assert self.arr_attr[5][-2:] == self.pyarr_attr[5][-2:], repr((
+            self.arr_attr[5], self.pyarr_attr[5]
+            ))  # descr
         assert self.arr_attr[6] == self.pyarr_attr[6], repr((
             self.arr_attr[6],
             self.pyarr_attr[6],
@@ -338,14 +368,27 @@ class TestIntent:
 
 
 class TestSharedMemory:
-    num2seq = [1, 2]
-    num23seq = [[1, 2, 3], [4, 5, 6]]
 
     @pytest.fixture(autouse=True, scope="class", params=_type_names)
     def setup_type(self, request):
         request.cls.type = Type(request.param)
         request.cls.array = lambda self, dims, intent, obj: Array(
             Type(request.param), dims, intent, obj)
+
+    @property
+    def num2seq(self):
+        if self.type.NAME.startswith('STRING'):
+            elsize = self.type.elsize
+            return ['1' * elsize, '2' * elsize]
+        return [1, 2]
+
+    @property
+    def num23seq(self):
+        if self.type.NAME.startswith('STRING'):
+            elsize = self.type.elsize
+            return [['1' * elsize, '2' * elsize, '3' * elsize],
+                    ['4' * elsize, '5' * elsize, '6' * elsize]]
+        return [[1, 2, 3], [4, 5, 6]]
 
     def test_in_from_2seq(self):
         a = self.array([2], intent.in_, self.num2seq)
@@ -367,9 +410,9 @@ class TestSharedMemory:
         """Test if intent(in) array can be passed without copies"""
         seq = getattr(self, "num" + inp)
         obj = np.array(seq, dtype=self.type.dtype, order=order)
-        obj.setflags(write=(write == "w"))
+        obj.setflags(write=(write == 'w'))
         a = self.array(obj.shape,
-                       ((order == "C" and intent.in_.c) or intent.in_), obj)
+                       ((order == 'C' and intent.in_.c) or intent.in_), obj)
         assert a.has_shared_memory()
 
     def test_inout_2seq(self):
@@ -496,7 +539,14 @@ class TestSharedMemory:
 
     def test_in_cache_from_2casttype_failure(self):
         for t in self.type.all_types():
+            if t.NAME == 'STRING':
+                # string elsize is 0, so skipping the test
+                continue
             if t.elsize >= self.type.elsize:
+                continue
+            is_int = np.issubdtype(t.dtype, np.integer)
+            if is_int and int(self.num2seq[0]) > np.iinfo(t.dtype).max:
+                # skip test if num2seq would trigger an overflow error
                 continue
             obj = np.array(self.num2seq, dtype=t.dtype)
             shape = (len(self.num2seq), )

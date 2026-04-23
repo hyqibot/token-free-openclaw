@@ -13,12 +13,13 @@ from cryptography.hazmat.primitives.twofactor.hotp import (
     HOTPHashTypes,
     _generate_uri,
 )
+from cryptography.utils import Buffer
 
 
 class TOTP:
     def __init__(
         self,
-        key: bytes,
+        key: Buffer,
         length: int,
         algorithm: HOTPHashTypes,
         time_step: int,
@@ -31,6 +32,11 @@ class TOTP:
         )
 
     def generate(self, time: int | float) -> bytes:
+        if not isinstance(time, (int, float)):
+            raise TypeError(
+                "Time parameter must be an integer type or float type."
+            )
+
         counter = int(time / self._time_step)
         return self._hotp.generate(counter)
 

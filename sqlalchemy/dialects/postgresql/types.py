@@ -1,5 +1,5 @@
 # dialects/postgresql/types.py
-# Copyright (C) 2013-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2013-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -52,28 +52,38 @@ class BYTEA(sqltypes.LargeBinary):
     __visit_name__ = "BYTEA"
 
 
-class INET(sqltypes.TypeEngine[str]):
+class _NetworkAddressTypeMixin:
+
+    def coerce_compared_value(
+        self, op: Optional[OperatorType], value: Any
+    ) -> TypeEngine[Any]:
+        if TYPE_CHECKING:
+            assert isinstance(self, TypeEngine)
+        return self
+
+
+class INET(_NetworkAddressTypeMixin, sqltypes.TypeEngine[str]):
     __visit_name__ = "INET"
 
 
 PGInet = INET
 
 
-class CIDR(sqltypes.TypeEngine[str]):
+class CIDR(_NetworkAddressTypeMixin, sqltypes.TypeEngine[str]):
     __visit_name__ = "CIDR"
 
 
 PGCidr = CIDR
 
 
-class MACADDR(sqltypes.TypeEngine[str]):
+class MACADDR(_NetworkAddressTypeMixin, sqltypes.TypeEngine[str]):
     __visit_name__ = "MACADDR"
 
 
 PGMacAddr = MACADDR
 
 
-class MACADDR8(sqltypes.TypeEngine[str]):
+class MACADDR8(_NetworkAddressTypeMixin, sqltypes.TypeEngine[str]):
     __visit_name__ = "MACADDR8"
 
 
@@ -94,12 +104,11 @@ class MONEY(sqltypes.TypeEngine[str]):
         from sqlalchemy import Dialect
         from sqlalchemy import TypeDecorator
 
+
         class NumericMoney(TypeDecorator):
             impl = MONEY
 
-            def process_result_value(
-                self, value: Any, dialect: Dialect
-            ) -> None:
+            def process_result_value(self, value: Any, dialect: Dialect) -> None:
                 if value is not None:
                     # adjust this for the currency and numeric
                     m = re.match(r"\$([\d.]+)", value)
@@ -114,6 +123,7 @@ class MONEY(sqltypes.TypeEngine[str]):
         from sqlalchemy import cast
         from sqlalchemy import TypeDecorator
 
+
         class NumericMoney(TypeDecorator):
             impl = MONEY
 
@@ -122,7 +132,7 @@ class MONEY(sqltypes.TypeEngine[str]):
 
     .. versionadded:: 1.2
 
-    """
+    """  # noqa: E501
 
     __visit_name__ = "MONEY"
 

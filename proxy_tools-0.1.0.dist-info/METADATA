@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: proxy_tools
+Version: 0.1.0
+Summary: Proxy Implementation
+Home-page: http://github.com/jtushman/proxy_tools
+Author: Jonathan Tushman
+Author-email: jonathan@zefr.com
+License: MIT
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: license
+Dynamic: summary

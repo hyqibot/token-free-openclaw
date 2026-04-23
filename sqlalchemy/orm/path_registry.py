@@ -1,12 +1,10 @@
 # orm/path_registry.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
 # the MIT License: https://www.opensource.org/licenses/mit-license.php
-"""Path tracking utilities, representing mapper graph traversals.
-
-"""
+"""Path tracking utilities, representing mapper graph traversals."""
 
 from __future__ import annotations
 
@@ -566,7 +564,7 @@ class PropRegistry(PathRegistry):
             # entities are used.
             #
             # here we are trying to distinguish between a path that starts
-            # on a the with_polymorhpic entity vs. one that starts on a
+            # on a with_polymorphic entity vs. one that starts on a
             # normal entity that introduces a with_polymorphic() in the
             # middle using of_type():
             #
@@ -701,13 +699,28 @@ class AbstractEntityRegistry(CreatesToken):
         # This is basically the only place that the "is_unnatural" flag
         # actually changes behavior.
         if parent.path and (self.is_aliased_class or parent.is_unnatural):
-            # this is an infrequent code path used only for loader strategies
-            # that also make use of of_type().
-            if entity.mapper.isa(parent.natural_path[-1].mapper):  # type: ignore # noqa: E501
+            # this is an infrequent code path used for loader strategies that
+            # also make use of of_type() or other intricate polymorphic
+            # base/subclass combinations
+            parent_natural_entity = parent.natural_path[-1]
+
+            if entity.mapper.isa(
+                parent_natural_entity.mapper  # type: ignore
+            ) or parent_natural_entity.mapper.isa(  # type: ignore
+                entity.mapper
+            ):
+                # when the entity mapper and parent mapper are in an
+                # inheritance relationship, use entity.mapper in natural_path.
+                # First case: entity.mapper inherits from parent mapper (e.g.,
+                # accessing a subclass mapper through parent path). Second case
+                # (issue #13193): parent mapper inherits from entity.mapper
+                # (e.g., parent path has Sub(Base) but we're accessing with
+                # Base where Base.related is declared, so use Base in
+                # natural_path).
                 self.natural_path = parent.natural_path + (entity.mapper,)
             else:
                 self.natural_path = parent.natural_path + (
-                    parent.natural_path[-1].entity,  # type: ignore
+                    parent_natural_entity.entity,  # type: ignore
                 )
         # it seems to make sense that since these paths get mixed up
         # with statements that are cached or not, we should make

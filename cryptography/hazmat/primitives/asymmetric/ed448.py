@@ -9,6 +9,7 @@ import abc
 from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
 from cryptography.hazmat.bindings._rust import openssl as rust_openssl
 from cryptography.hazmat.primitives import _serialization
+from cryptography.utils import Buffer
 
 
 class Ed448PublicKey(metaclass=abc.ABCMeta):
@@ -42,7 +43,7 @@ class Ed448PublicKey(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def verify(self, signature: bytes, data: bytes) -> None:
+    def verify(self, signature: Buffer, data: Buffer) -> None:
         """
         Verify the signature.
         """
@@ -51,6 +52,12 @@ class Ed448PublicKey(metaclass=abc.ABCMeta):
     def __eq__(self, other: object) -> bool:
         """
         Checks equality.
+        """
+
+    @abc.abstractmethod
+    def __copy__(self) -> Ed448PublicKey:
+        """
+        Returns a copy.
         """
 
 
@@ -72,7 +79,7 @@ class Ed448PrivateKey(metaclass=abc.ABCMeta):
         return rust_openssl.ed448.generate_key()
 
     @classmethod
-    def from_private_bytes(cls, data: bytes) -> Ed448PrivateKey:
+    def from_private_bytes(cls, data: Buffer) -> Ed448PrivateKey:
         from cryptography.hazmat.backends.openssl.backend import backend
 
         if not backend.ed448_supported():
@@ -90,7 +97,7 @@ class Ed448PrivateKey(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def sign(self, data: bytes) -> bytes:
+    def sign(self, data: Buffer) -> bytes:
         """
         Signs the data.
         """
@@ -111,6 +118,12 @@ class Ed448PrivateKey(metaclass=abc.ABCMeta):
         """
         The raw bytes of the private key.
         Equivalent to private_bytes(Raw, Raw, NoEncryption()).
+        """
+
+    @abc.abstractmethod
+    def __copy__(self) -> Ed448PrivateKey:
+        """
+        Returns a copy.
         """
 
 

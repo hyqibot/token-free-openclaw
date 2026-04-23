@@ -142,6 +142,9 @@ class RequestHandler(BaseProtocol):
     """
 
     __slots__ = (
+        "max_field_size",
+        "max_headers",
+        "max_line_size",
         "_request_count",
         "_keepalive",
         "_manager",
@@ -188,7 +191,7 @@ class RequestHandler(BaseProtocol):
         access_log_format: str = AccessLogger.LOG_FORMAT,
         debug: bool = False,
         max_line_size: int = 8190,
-        max_headers: int = 32768,
+        max_headers: int = 128,
         max_field_size: int = 8190,
         lingering_time: float = 10.0,
         read_bufsize: int = 2**16,
@@ -204,6 +207,10 @@ class RequestHandler(BaseProtocol):
         self._manager: Optional[Server] = manager
         self._request_handler: Optional[_RequestHandler] = manager.request_handler
         self._request_factory: Optional[_RequestFactory] = manager.request_factory
+
+        self.max_line_size = max_line_size
+        self.max_headers = max_headers
+        self.max_field_size = max_field_size
 
         self._tcp_keepalive = tcp_keepalive
         # placeholder to be replaced on keepalive timeout setup

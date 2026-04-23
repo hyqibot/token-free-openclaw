@@ -1,12 +1,10 @@
 # engine/base.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
 # the MIT License: https://www.opensource.org/licenses/mit-license.php
-"""Defines :class:`_engine.Connection` and :class:`_engine.Engine`.
-
-"""
+"""Defines :class:`_engine.Connection` and :class:`_engine.Engine`."""
 from __future__ import annotations
 
 import contextlib
@@ -70,12 +68,11 @@ if typing.TYPE_CHECKING:
     from ..sql._typing import _InfoType
     from ..sql.compiler import Compiled
     from ..sql.ddl import ExecutableDDLElement
-    from ..sql.ddl import SchemaDropper
-    from ..sql.ddl import SchemaGenerator
+    from ..sql.ddl import InvokeDDLBase
     from ..sql.functions import FunctionElement
     from ..sql.schema import DefaultGenerator
     from ..sql.schema import HasSchemaAttr
-    from ..sql.schema import SchemaItem
+    from ..sql.schema import SchemaVisitable
     from ..sql.selectable import TypedReturnsRows
 
 
@@ -378,12 +375,11 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
         :param stream_results: Available on: :class:`_engine.Connection`,
           :class:`_sql.Executable`.
 
-          Indicate to the dialect that results should be
-          "streamed" and not pre-buffered, if possible.  For backends
-          such as PostgreSQL, MySQL and MariaDB, this indicates the use of
-          a "server side cursor" as opposed to a client side cursor.
-          Other backends such as that of Oracle may already use server
-          side cursors by default.
+          Indicate to the dialect that results should be "streamed" and not
+          pre-buffered, if possible.  For backends such as PostgreSQL, MySQL
+          and MariaDB, this indicates the use of a "server side cursor" as
+          opposed to a client side cursor.  Other backends such as that of
+          Oracle Database may already use server side cursors by default.
 
           The usage of
           :paramref:`_engine.Connection.execution_options.stream_results` is
@@ -801,7 +797,6 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
                 with conn.begin() as trans:
                     conn.execute(table.insert(), {"username": "sandy"})
 
-
         The returned object is an instance of :class:`_engine.RootTransaction`.
         This object represents the "scope" of the transaction,
         which completes when either the :meth:`_engine.Transaction.rollback`
@@ -907,7 +902,7 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
                     trans.rollback()  # rollback to savepoint
 
                 # outer transaction continues
-                connection.execute( ... )
+                connection.execute(...)
 
         If :meth:`_engine.Connection.begin_nested` is called without first
         calling :meth:`_engine.Connection.begin` or
@@ -917,11 +912,11 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
 
             with engine.connect() as connection:  # begin() wasn't called
 
-                with connection.begin_nested(): will auto-"begin()" first
-                    connection.execute( ... )
+                with connection.begin_nested():  # will auto-"begin()" first
+                    connection.execute(...)
                 # savepoint is released
 
-                connection.execute( ... )
+                connection.execute(...)
 
                 # explicitly commit outer transaction
                 connection.commit()
@@ -1117,10 +1112,16 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
         if self._still_open_and_dbapi_connection_is_valid:
             if self._echo:
                 if self._is_autocommit_isolation():
-                    self._log_info(
-                        "ROLLBACK using DBAPI connection.rollback(), "
-                        "DBAPI should ignore due to autocommit mode"
-                    )
+                    if self.dialect.skip_autocommit_rollback:
+                        self._log_info(
+                            "ROLLBACK will be skipped by "
+                            "skip_autocommit_rollback"
+                        )
+                    else:
+                        self._log_info(
+                            "ROLLBACK using DBAPI connection.rollback(); "
+                            "set skip_autocommit_rollback to prevent fully"
+                        )
                 else:
                     self._log_info("ROLLBACK")
             try:
@@ -1136,7 +1137,7 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
             if self._is_autocommit_isolation():
                 self._log_info(
                     "COMMIT using DBAPI connection.commit(), "
-                    "DBAPI should ignore due to autocommit mode"
+                    "has no effect due to autocommit mode"
                 )
             else:
                 self._log_info("COMMIT")
@@ -1738,21 +1739,20 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
 
              conn.exec_driver_sql(
                  "INSERT INTO table (id, value) VALUES (%(id)s, %(value)s)",
-                 [{"id":1, "value":"v1"}, {"id":2, "value":"v2"}]
+                 [{"id": 1, "value": "v1"}, {"id": 2, "value": "v2"}],
              )
 
          Single dictionary::
 
              conn.exec_driver_sql(
                  "INSERT INTO table (id, value) VALUES (%(id)s, %(value)s)",
-                 dict(id=1, value="v1")
+                 dict(id=1, value="v1"),
              )
 
          Single tuple::
 
              conn.exec_driver_sql(
-                 "INSERT INTO table (id, value) VALUES (?, ?)",
-                 (1, 'v1')
+                 "INSERT INTO table (id, value) VALUES (?, ?)", (1, "v1")
              )
 
          .. note:: The :meth:`_engine.Connection.exec_driver_sql` method does
@@ -2022,6 +2022,13 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
         else:
             do_execute_dispatch = ()
 
+        if engine_events:
+            _WORKAROUND_ISSUE_13018 = getattr(
+                self, "_WORKAROUND_ISSUE_13018", False
+            )
+        else:
+            _WORKAROUND_ISSUE_13018 = False
+
         if self._echo:
             stats = context._get_cache_stats() + " (insertmanyvalues)"
 
@@ -2031,6 +2038,7 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
         rowcount = 0
 
         for imv_batch in dialect._deliver_insertmanyvalues_batches(
+            self,
             cursor,
             str_statement,
             effective_parameters,
@@ -2051,6 +2059,7 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
                         imv_batch.replaced_parameters,
                         None,
                         context,
+                        is_sub_exec=True,
                     )
 
             sub_stmt = imv_batch.replaced_statement
@@ -2134,8 +2143,9 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
                 self.dispatch.after_cursor_execute(
                     self,
                     cursor,
-                    str_statement,
-                    effective_parameters,
+                    # TODO: this will be fixed by #13018
+                    sub_stmt if _WORKAROUND_ISSUE_13018 else str_statement,
+                    sub_params if _WORKAROUND_ISSUE_13018 else parameters,
                     context,
                     context.executemany,
                 )
@@ -2429,9 +2439,7 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
                     break
 
             if sqlalchemy_exception and is_disconnect != ctx.is_disconnect:
-                sqlalchemy_exception.connection_invalidated = is_disconnect = (
-                    ctx.is_disconnect
-                )
+                sqlalchemy_exception.connection_invalidated = ctx.is_disconnect
 
         if newraise:
             raise newraise.with_traceback(exc_info[2]) from e
@@ -2444,8 +2452,8 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
 
     def _run_ddl_visitor(
         self,
-        visitorcallable: Type[Union[SchemaGenerator, SchemaDropper]],
-        element: SchemaItem,
+        visitorcallable: Type[InvokeDDLBase],
+        element: SchemaVisitable,
         **kwargs: Any,
     ) -> None:
         """run a DDL visitor.
@@ -2454,7 +2462,9 @@ class Connection(ConnectionEventsTarget, inspection.Inspectable["Inspector"]):
         options given to the visitor so that "checkfirst" is skipped.
 
         """
-        visitorcallable(self.dialect, self, **kwargs).traverse_single(element)
+        visitorcallable(
+            dialect=self.dialect, connection=self, **kwargs
+        ).traverse_single(element)
 
 
 class ExceptionContextImpl(ExceptionContext):
@@ -2512,6 +2522,7 @@ class Transaction(TransactionalContext):
     :class:`_engine.Connection`::
 
         from sqlalchemy import create_engine
+
         engine = create_engine("postgresql+psycopg2://scott:tiger@localhost/test")
         connection = engine.connect()
         trans = connection.begin()
@@ -3089,10 +3100,10 @@ class Engine(
 
             shards = {"default": "base", "shard_1": "db1", "shard_2": "db2"}
 
+
             @event.listens_for(Engine, "before_cursor_execute")
-            def _switch_shard(conn, cursor, stmt,
-                    params, context, executemany):
-                shard_id = conn.get_execution_options().get('shard_id', "default")
+            def _switch_shard(conn, cursor, stmt, params, context, executemany):
+                shard_id = conn.get_execution_options().get("shard_id", "default")
                 current_shard = conn.info.get("current_shard", None)
 
                 if current_shard != shard_id:
@@ -3169,6 +3180,12 @@ class Engine(
         connections. The latter strategy is more appropriate for an initializer
         in a forked Python process.
 
+        Event listeners associated with the old pool via :class:`.PoolEvents`
+        are **transferred to the new pool**; this is to support the pattern
+        by which :class:`.PoolEvents` are set up in terms of the owning
+        :class:`.Engine` without the need to refer to the :class:`.Pool`
+        directly.
+
         :param close: if left at its default of ``True``, has the
          effect of fully closing all **currently checked in**
          database connections.  Connections that are still checked out
@@ -3194,6 +3211,8 @@ class Engine(
 
             :ref:`pooling_multiprocessing`
 
+            :meth:`.ConnectionEvents.engine_disposed`
+
         """
         if close:
             self.pool.dispose()
@@ -3218,9 +3237,7 @@ class Engine(
         E.g.::
 
             with engine.begin() as conn:
-                conn.execute(
-                    text("insert into table (x, y, z) values (1, 2, 3)")
-                )
+                conn.execute(text("insert into table (x, y, z) values (1, 2, 3)"))
                 conn.execute(text("my_special_procedure(5)"))
 
         Upon successful operation, the :class:`.Transaction`
@@ -3236,15 +3253,15 @@ class Engine(
             :meth:`_engine.Connection.begin` - start a :class:`.Transaction`
             for a particular :class:`_engine.Connection`.
 
-        """
+        """  # noqa: E501
         with self.connect() as conn:
             with conn.begin():
                 yield conn
 
     def _run_ddl_visitor(
         self,
-        visitorcallable: Type[Union[SchemaGenerator, SchemaDropper]],
-        element: SchemaItem,
+        visitorcallable: Type[InvokeDDLBase],
+        element: SchemaVisitable,
         **kwargs: Any,
     ) -> None:
         with self.begin() as conn:

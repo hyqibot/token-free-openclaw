@@ -1,5 +1,5 @@
 # orm/attributes.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -401,7 +401,7 @@ class QueryableAttribute(
             parententity=adapt_to_entity,
         )
 
-    def of_type(self, entity: _EntityType[Any]) -> QueryableAttribute[_T]:
+    def of_type(self, entity: _EntityType[_T]) -> QueryableAttribute[_T]:
         return QueryableAttribute(
             self.class_,
             self.key,
@@ -461,6 +461,9 @@ class QueryableAttribute(
         self, state: InstanceState[Any], optimistic: bool = False
     ) -> bool:
         return self.impl.hasparent(state, optimistic=optimistic) is not False
+
+    def _column_strategy_attrs(self) -> Sequence[QueryableAttribute[Any]]:
+        return (self,)
 
     def __getattr__(self, key: str) -> Any:
         try:
@@ -595,7 +598,7 @@ def create_proxied_attribute(
     # TODO: can move this to descriptor_props if the need for this
     # function is removed from ext/hybrid.py
 
-    class Proxy(QueryableAttribute[Any]):
+    class Proxy(QueryableAttribute[_T_co]):
         """Presents the :class:`.QueryableAttribute` interface as a
         proxy on top of a Python descriptor / :class:`.PropComparator`
         combination.
@@ -610,13 +613,13 @@ def create_proxied_attribute(
 
         def __init__(
             self,
-            class_,
-            key,
-            descriptor,
-            comparator,
-            adapt_to_entity=None,
-            doc=None,
-            original_property=None,
+            class_: _ExternalEntityType[Any],
+            key: str,
+            descriptor: Any,
+            comparator: interfaces.PropComparator[_T_co],
+            adapt_to_entity: Optional[AliasedInsp[Any]] = None,
+            doc: Optional[str] = None,
+            original_property: Optional[QueryableAttribute[_T_co]] = None,
         ):
             self.class_ = class_
             self.key = key
@@ -627,11 +630,11 @@ def create_proxied_attribute(
             self._doc = self.__doc__ = doc
 
         @property
-        def _parententity(self):
+        def _parententity(self):  # type: ignore[override]
             return inspection.inspect(self.class_, raiseerr=False)
 
         @property
-        def parent(self):
+        def parent(self):  # type: ignore[override]
             return inspection.inspect(self.class_, raiseerr=False)
 
         _is_internal_proxy = True
@@ -640,6 +643,13 @@ def create_proxied_attribute(
             ("key", visitors.ExtendedInternalTraversal.dp_string),
             ("_parententity", visitors.ExtendedInternalTraversal.dp_multi),
         ]
+
+        def _column_strategy_attrs(self) -> Sequence[QueryableAttribute[Any]]:
+            prop = self.original_property
+            if prop is None:
+                return ()
+            else:
+                return prop._column_strategy_attrs()
 
         @property
         def _impl_uses_objects(self):
@@ -2663,7 +2673,7 @@ def init_collection(obj: object, key: str) -> CollectionAdapter:
     This function is used to provide direct access to collection internals
     for a previously unloaded attribute.  e.g.::
 
-        collection_adapter = init_collection(someobject, 'elements')
+        collection_adapter = init_collection(someobject, "elements")
         for elem in values:
             collection_adapter.append_without_event(elem)
 
@@ -2707,7 +2717,7 @@ def init_state_collection(
     return adapter
 
 
-def set_committed_value(instance, key, value):
+def set_committed_value(instance: object, key: str, value: Any) -> None:
     """Set the value of an attribute with no history events.
 
     Cancels any previous history present.  The value should be

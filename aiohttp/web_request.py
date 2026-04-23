@@ -696,7 +696,12 @@ class BaseRequest(MutableMapping[str, Any], HeadersMixin):
 
     async def multipart(self) -> MultipartReader:
         """Return async iterator to process BODY as multipart."""
-        return MultipartReader(self._headers, self._payload)
+        return MultipartReader(
+            self._headers,
+            self._payload,
+            max_field_size=self._protocol.max_field_size,
+            max_headers=self._protocol.max_headers,
+        )
 
     async def post(self) -> "MultiDictProxy[Union[str, bytes, FileField]]":
         """Return POST parameters."""
@@ -738,17 +743,17 @@ class BaseRequest(MutableMapping[str, Any], HeadersMixin):
                         tmp = await self._loop.run_in_executor(
                             None, tempfile.TemporaryFile
                         )
-                        chunk = await field.read_chunk(size=2**16)
-                        while chunk:
-                            chunk = await field.decode(chunk)
-                            await self._loop.run_in_executor(None, tmp.write, chunk)
-                            size += len(chunk)
-                            if 0 < max_size < size:
-                                await self._loop.run_in_executor(None, tmp.close)
-                                raise HTTPRequestEntityTooLarge(
-                                    max_size=max_size, actual_size=size
+                        while chunk := await field.read_chunk(size=2**18):
+                            async for decoded_chunk in field.decode_iter(chunk):
+                                await self._loop.run_in_executor(
+                                    None, tmp.write, decoded_chunk
                                 )
-                            chunk = await field.read_chunk(size=2**16)
+                                size += len(decoded_chunk)
+                                if 0 < max_size < size:
+                                    await self._loop.run_in_executor(None, tmp.close)
+                                    raise HTTPRequestEntityTooLarge(
+                                        max_size=max_size, actual_size=size
+                                    )
                         await self._loop.run_in_executor(None, tmp.seek, 0)
 
                         if field_ct is None:
@@ -764,17 +769,25 @@ class BaseRequest(MutableMapping[str, Any], HeadersMixin):
                         out.add(field.name, ff)
                     else:
                         # deal with ordinary data
-                        value = await field.read(decode=True)
+                        raw_data = bytearray()
+                        while chunk := await field.read_chunk():
+                            size += len(chunk)
+                            if 0 < max_size < size:
+                                raise HTTPRequestEntityTooLarge(
+                                    max_size=max_size, actual_size=size
+                                )
+                            raw_data.extend(chunk)
+
+                        value = bytearray()
+                        # form-data doesn't support compression, so don't need to check size again.
+                        async for d in field.decode_iter(raw_data):
+                            value.extend(d)
+
                         if field_ct is None or field_ct.startswith("text/"):
                             charset = field.get_charset(default="utf-8")
                             out.add(field.name, value.decode(charset))
                         else:
                             out.add(field.name, value)
-                        size += len(value)
-                        if 0 < max_size < size:
-                            raise HTTPRequestEntityTooLarge(
-                                max_size=max_size, actual_size=size
-                            )
                 else:
                     raise ValueError(
                         "To decode nested multipart you need to use custom reader",

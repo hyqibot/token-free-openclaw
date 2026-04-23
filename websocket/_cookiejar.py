@@ -1,52 +1,73 @@
-try:
-    import Cookie
-except:
-    import http.cookies as Cookie
+import http.cookies
+from typing import Optional
+
+"""
+_cookiejar.py
+websocket - WebSocket client library for Python
+
+Copyright 2025 engn33r
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
 
 
-class SimpleCookieJar(object):
-    def __init__(self):
-        self.jar = dict()
+class SimpleCookieJar:
+    def __init__(self) -> None:
+        self.jar: dict = {}
 
-    def add(self, set_cookie):
+    def add(self, set_cookie: Optional[str]) -> None:
         if set_cookie:
-            try:
-                simpleCookie = Cookie.SimpleCookie(set_cookie)
-            except:
-                simpleCookie = Cookie.SimpleCookie(set_cookie.encode('ascii', 'ignore'))
+            simple_cookie = http.cookies.SimpleCookie(set_cookie)
 
-            for k, v in simpleCookie.items():
-                domain = v.get("domain")
-                if domain:
+            for v in simple_cookie.values():
+                if domain := v.get("domain"):
                     if not domain.startswith("."):
-                        domain = "." + domain
-                    cookie = self.jar.get(domain) if self.jar.get(domain) else Cookie.SimpleCookie()
-                    cookie.update(simpleCookie)
+                        domain = f".{domain}"
+                    cookie = self.jar.get(domain)
+                    if cookie is None:
+                        cookie = http.cookies.SimpleCookie()
+                    cookie.update(simple_cookie)
                     self.jar[domain.lower()] = cookie
 
-    def set(self, set_cookie):
+    def set(self, set_cookie: str) -> None:
         if set_cookie:
-            try:
-                simpleCookie = Cookie.SimpleCookie(set_cookie)
-            except:
-                simpleCookie = Cookie.SimpleCookie(set_cookie.encode('ascii', 'ignore'))
+            simple_cookie = http.cookies.SimpleCookie(set_cookie)
 
-            for k, v in simpleCookie.items():
-                domain = v.get("domain")
-                if domain:
+            for v in simple_cookie.values():
+                if domain := v.get("domain"):
                     if not domain.startswith("."):
-                        domain = "." + domain
-                    self.jar[domain.lower()] = simpleCookie
+                        domain = f".{domain}"
+                    self.jar[domain.lower()] = simple_cookie
 
-    def get(self, host):
+    def get(self, host: str) -> str:
         if not host:
             return ""
 
         cookies = []
-        for domain, simpleCookie in self.jar.items():
+        for domain, _ in self.jar.items():
             host = host.lower()
             if host.endswith(domain) or host == domain[1:]:
                 cookies.append(self.jar.get(domain))
 
-        return "; ".join(filter(None, ["%s=%s" % (k, v.value) for cookie in filter(None, sorted(cookies)) for k, v in
-                                       sorted(cookie.items())]))
+        return "; ".join(
+            filter(
+                None,
+                sorted(
+                    [
+                        f"{k}={v.value}"
+                        for cookie in filter(None, cookies)
+                        for k, v in cookie.items()
+                    ]
+                ),
+            )
+        )

@@ -1,5 +1,5 @@
 # dialects/postgresql/ranges.py
-# Copyright (C) 2013-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2013-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -271,9 +271,9 @@ class Range(Generic[_T]):
                     value2 += step
                     value2_inc = False
 
-        if value1 < value2:  # type: ignore
+        if value1 < value2:
             return -1
-        elif value1 > value2:  # type: ignore
+        elif value1 > value2:
             return 1
         elif only_values:
             return 0
@@ -359,6 +359,8 @@ class Range(Generic[_T]):
             return value.contained_by(self)
         else:
             return self._contains_value(value)
+
+    __contains__ = contains
 
     def overlaps(self, other: Range[_T]) -> bool:
         "Determine whether this range overlaps with `other`."

@@ -1,14 +1,12 @@
 # sql/sqltypes.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
 # the MIT License: https://www.opensource.org/licenses/mit-license.php
 # mypy: allow-untyped-defs, allow-untyped-calls
 
-"""SQL specific types.
-
-"""
+"""SQL specific types."""
 from __future__ import annotations
 
 import collections.abc as collections_abc
@@ -21,7 +19,9 @@ from typing import Any
 from typing import Callable
 from typing import cast
 from typing import Dict
+from typing import Iterable
 from typing import List
+from typing import Mapping
 from typing import Optional
 from typing import overload
 from typing import Sequence
@@ -59,17 +59,22 @@ from .. import util
 from ..engine import processors
 from ..util import langhelpers
 from ..util import OrderedDict
+from ..util import warn_deprecated
+from ..util.typing import get_args
 from ..util.typing import is_literal
+from ..util.typing import is_pep695
 from ..util.typing import Literal
-from ..util.typing import typing_get_args
 
 if TYPE_CHECKING:
     from ._typing import _ColumnExpressionArgument
+    from ._typing import _CreateDropBind
     from ._typing import _TypeEngineArgument
+    from .elements import ColumnElement
     from .operators import OperatorType
     from .schema import MetaData
     from .type_api import _BindProcessorType
     from .type_api import _ComparatorFactory
+    from .type_api import _LiteralProcessorType
     from .type_api import _MatchedOnType
     from .type_api import _ResultProcessorType
     from ..engine.interfaces import Dialect
@@ -77,6 +82,7 @@ if TYPE_CHECKING:
 _T = TypeVar("_T", bound="Any")
 _CT = TypeVar("_CT", bound=Any)
 _TE = TypeVar("_TE", bound="TypeEngine[Any]")
+_P = TypeVar("_P")
 
 
 class HasExpressionLookup(TypeEngineMixin):
@@ -202,7 +208,7 @@ class String(Concatenable, TypeEngine[str]):
           .. sourcecode:: pycon+sql
 
             >>> from sqlalchemy import cast, select, String
-            >>> print(select(cast('some string', String(collation='utf8'))))
+            >>> print(select(cast("some string", String(collation="utf8"))))
             {printsql}SELECT CAST(:param_1 AS VARCHAR COLLATE utf8) AS anon_1
 
           .. note::
@@ -216,6 +222,11 @@ class String(Concatenable, TypeEngine[str]):
 
         self.length = length
         self.collation = collation
+
+    def _with_collation(self, collation):
+        new_type = self.copy()
+        new_type.collation = collation
+        return new_type
 
     def _resolve_for_literal(self, value):
         # I was SO PROUD of my regex trick, but we dont need it.
@@ -237,10 +248,14 @@ class String(Concatenable, TypeEngine[str]):
 
         return process
 
-    def bind_processor(self, dialect):
+    def bind_processor(
+        self, dialect: Dialect
+    ) -> Optional[_BindProcessorType[str]]:
         return None
 
-    def result_processor(self, dialect, coltype):
+    def result_processor(
+        self, dialect: Dialect, coltype: object
+    ) -> Optional[_ResultProcessorType[str]]:
         return None
 
     @property
@@ -269,8 +284,8 @@ class Unicode(String):
     The :class:`.Unicode` type is a :class:`.String` subclass that assumes
     input and output strings that may contain non-ASCII characters, and for
     some backends implies an underlying column type that is explicitly
-    supporting of non-ASCII data, such as ``NVARCHAR`` on Oracle and SQL
-    Server.  This will impact the output of ``CREATE TABLE`` statements and
+    supporting of non-ASCII data, such as ``NVARCHAR`` on Oracle Database and
+    SQL Server.  This will impact the output of ``CREATE TABLE`` statements and
     ``CAST`` functions at the dialect level.
 
     The character encoding used by the :class:`.Unicode` type that is used to
@@ -300,7 +315,6 @@ class Unicode(String):
         to :class:`.Unicode`.
 
         :meth:`.DialectEvents.do_setinputsizes`
-
 
     """
 
@@ -597,7 +611,10 @@ class Float(Numeric[_N]):
 
     __visit_name__ = "float"
 
-    scale = None
+    if not TYPE_CHECKING:
+        # this is not in 2.1 branch, not clear if needed for 2.0
+        # implementation
+        scale = None
 
     @overload
     def __init__(
@@ -629,16 +646,16 @@ class Float(Numeric[_N]):
            indicates a number of digits for the generic
            :class:`_sqltypes.Float` datatype.
 
-           .. note:: For the Oracle backend, the
+           .. note:: For the Oracle Database backend, the
               :paramref:`_sqltypes.Float.precision` parameter is not accepted
-              when rendering DDL, as Oracle does not support float precision
+              when rendering DDL, as Oracle Database does not support float precision
               specified as a number of decimal places. Instead, use the
-              Oracle-specific :class:`_oracle.FLOAT` datatype and specify the
+              Oracle Database-specific :class:`_oracle.FLOAT` datatype and specify the
               :paramref:`_oracle.FLOAT.binary_precision` parameter. This is new
               in version 2.0 of SQLAlchemy.
 
               To create a database agnostic :class:`_types.Float` that
-              separately specifies binary precision for Oracle, use
+              separately specifies binary precision for Oracle Database, use
               :meth:`_types.TypeEngine.with_variant` as follows::
 
                     from sqlalchemy import Column
@@ -647,7 +664,7 @@ class Float(Numeric[_N]):
 
                     Column(
                         "float_data",
-                        Float(5).with_variant(oracle.FLOAT(binary_precision=16), "oracle")
+                        Float(5).with_variant(oracle.FLOAT(binary_precision=16), "oracle"),
                     )
 
         :param asdecimal: the same flag as that of :class:`.Numeric`, but
@@ -749,7 +766,7 @@ class DateTime(
          to make use of the :class:`_types.TIMESTAMP` datatype directly when
          using this flag, as some databases include separate generic
          date/time-holding types distinct from the timezone-capable
-         TIMESTAMP datatype, such as Oracle.
+         TIMESTAMP datatype, such as Oracle Database.
 
 
         """
@@ -862,8 +879,16 @@ class Time(_RenderISO8601NoT, HasExpressionLookup, TypeEngine[dt.time]):
 class _Binary(TypeEngine[bytes]):
     """Define base behavior for binary types."""
 
+    length: Optional[int]
+
     def __init__(self, length: Optional[int] = None):
         self.length = length
+
+    @util.ro_memoized_property
+    def _generic_type_affinity(
+        self,
+    ) -> Type[TypeEngine[bytes]]:
+        return LargeBinary
 
     def literal_processor(self, dialect):
         def process(value):
@@ -1006,7 +1031,7 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
         if _adapted_from:
             self.dispatch = self.dispatch._join(_adapted_from.dispatch)
 
-    def _set_parent(self, column, **kw):
+    def _set_parent(self, parent, **kw):
         # set parent hook is when this type is associated with a column.
         # Column calls it for all SchemaEventTarget instances, either the
         # base type and/or variants in _variant_mapping.
@@ -1020,7 +1045,7 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
         # on_table/metadata_create/drop in this method, which is used by
         # "native" types with a separate CREATE/DROP e.g. Postgresql.ENUM
 
-        column._on_table_attach(util.portable_instancemethod(self._set_table))
+        parent._on_table_attach(util.portable_instancemethod(self._set_table))
 
     def _variant_mapping_for_set_table(self, column):
         if column.type._variant_mapping:
@@ -1080,6 +1105,11 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
         return self.adapt(
             cast("Type[TypeEngine[Any]]", self.__class__),
             _create_events=True,
+            metadata=(
+                kw.get("_to_metadata", self.metadata)
+                if self.metadata is not None
+                else None
+            ),
         )
 
     @overload
@@ -1097,21 +1127,23 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
         kw.setdefault("_adapted_from", self)
         return super().adapt(cls, **kw)
 
-    def create(self, bind, checkfirst=False):
+    def create(self, bind: _CreateDropBind, checkfirst: bool = False) -> None:
         """Issue CREATE DDL for this type, if applicable."""
 
         t = self.dialect_impl(bind.dialect)
         if isinstance(t, SchemaType) and t.__class__ is not self.__class__:
             t.create(bind, checkfirst=checkfirst)
 
-    def drop(self, bind, checkfirst=False):
+    def drop(self, bind: _CreateDropBind, checkfirst: bool = False) -> None:
         """Issue DROP DDL for this type, if applicable."""
 
         t = self.dialect_impl(bind.dialect)
         if isinstance(t, SchemaType) and t.__class__ is not self.__class__:
             t.drop(bind, checkfirst=checkfirst)
 
-    def _on_table_create(self, target, bind, **kw):
+    def _on_table_create(
+        self, target: Any, bind: _CreateDropBind, **kw: Any
+    ) -> None:
         if not self._is_impl_for_variant(bind.dialect, kw):
             return
 
@@ -1119,7 +1151,9 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
         if isinstance(t, SchemaType) and t.__class__ is not self.__class__:
             t._on_table_create(target, bind, **kw)
 
-    def _on_table_drop(self, target, bind, **kw):
+    def _on_table_drop(
+        self, target: Any, bind: _CreateDropBind, **kw: Any
+    ) -> None:
         if not self._is_impl_for_variant(bind.dialect, kw):
             return
 
@@ -1127,7 +1161,9 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
         if isinstance(t, SchemaType) and t.__class__ is not self.__class__:
             t._on_table_drop(target, bind, **kw)
 
-    def _on_metadata_create(self, target, bind, **kw):
+    def _on_metadata_create(
+        self, target: Any, bind: _CreateDropBind, **kw: Any
+    ) -> None:
         if not self._is_impl_for_variant(bind.dialect, kw):
             return
 
@@ -1135,7 +1171,9 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
         if isinstance(t, SchemaType) and t.__class__ is not self.__class__:
             t._on_metadata_create(target, bind, **kw)
 
-    def _on_metadata_drop(self, target, bind, **kw):
+    def _on_metadata_drop(
+        self, target: Any, bind: _CreateDropBind, **kw: Any
+    ) -> None:
         if not self._is_impl_for_variant(bind.dialect, kw):
             return
 
@@ -1143,7 +1181,9 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
         if isinstance(t, SchemaType) and t.__class__ is not self.__class__:
             t._on_metadata_drop(target, bind, **kw)
 
-    def _is_impl_for_variant(self, dialect, kw):
+    def _is_impl_for_variant(
+        self, dialect: Dialect, kw: Dict[str, Any]
+    ) -> Optional[bool]:
         variant_mapping = kw.pop("variant_mapping", None)
 
         if not variant_mapping:
@@ -1160,7 +1200,7 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
 
         # since PostgreSQL is the only DB that has ARRAY this can only
         # be integration tested by PG-specific tests
-        def _we_are_the_impl(typ):
+        def _we_are_the_impl(typ: SchemaType) -> bool:
             return (
                 typ is self
                 or isinstance(typ, ARRAY)
@@ -1173,6 +1213,11 @@ class SchemaType(SchemaEventTarget, TypeEngineMixin):
             return True
         elif dialect.name not in variant_mapping:
             return _we_are_the_impl(variant_mapping["_default"])
+        else:
+            return None
+
+
+_EnumTupleArg = Union[Sequence[enum.Enum], Sequence[str]]
 
 
 class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
@@ -1211,15 +1256,14 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
         import enum
         from sqlalchemy import Enum
 
+
         class MyEnum(enum.Enum):
             one = 1
             two = 2
             three = 3
 
-        t = Table(
-            'data', MetaData(),
-            Column('value', Enum(MyEnum))
-        )
+
+        t = Table("data", MetaData(), Column("value", Enum(MyEnum)))
 
         connection.execute(t.insert(), {"value": MyEnum.two})
         assert connection.scalar(t.select()) is MyEnum.two
@@ -1252,7 +1296,18 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
 
     __visit_name__ = "enum"
 
-    def __init__(self, *enums: object, **kw: Any):
+    values_callable: Optional[Callable[[Type[enum.Enum]], Sequence[str]]]
+    enum_class: Optional[Type[enum.Enum]]
+    _valid_lookup: Dict[Union[enum.Enum, str, None], Optional[str]]
+    _object_lookup: Dict[Optional[str], Union[enum.Enum, str, None]]
+
+    @overload
+    def __init__(self, enums: Type[enum.Enum], **kw: Any) -> None: ...
+
+    @overload
+    def __init__(self, *enums: str, **kw: Any) -> None: ...
+
+    def __init__(self, *enums: Union[str, Type[enum.Enum]], **kw: Any) -> None:
         r"""Construct an enum.
 
         Keyword arguments which don't apply to a specific backend are ignored
@@ -1384,7 +1439,7 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
            .. versionchanged:: 2.0 This parameter now defaults to True.
 
         """
-        self._enum_init(enums, kw)
+        self._enum_init(enums, kw)  # type: ignore[arg-type]
 
     @property
     def _enums_argument(self):
@@ -1393,7 +1448,7 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
         else:
             return self.enums
 
-    def _enum_init(self, enums, kw):
+    def _enum_init(self, enums: _EnumTupleArg, kw: Dict[str, Any]) -> None:
         """internal init for :class:`.Enum` and subclasses.
 
         friendly init helper used by subclasses to remove
@@ -1452,15 +1507,19 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
             _adapted_from=kw.pop("_adapted_from", None),
         )
 
-    def _parse_into_values(self, enums, kw):
+    def _parse_into_values(
+        self, enums: _EnumTupleArg, kw: Any
+    ) -> Tuple[Sequence[str], _EnumTupleArg]:
         if not enums and "_enums" in kw:
             enums = kw.pop("_enums")
 
         if len(enums) == 1 and hasattr(enums[0], "__members__"):
-            self.enum_class = enums[0]
+            self.enum_class = enums[0]  # type: ignore[assignment]
+            assert self.enum_class is not None
 
             _members = self.enum_class.__members__
 
+            members: Mapping[str, enum.Enum]
             if self._omit_aliases is True:
                 # remove aliases
                 members = OrderedDict(
@@ -1476,7 +1535,13 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
             return values, objects
         else:
             self.enum_class = None
-            return enums, enums
+            return enums, enums  # type: ignore[return-value]
+
+    def _compare_type_affinity(self, other: TypeEngine[Any]) -> bool:
+        return (
+            super()._compare_type_affinity(other)
+            or other._type_affinity is String
+        )
 
     def _resolve_for_literal(self, value: Any) -> Enum:
         tv = type(value)
@@ -1497,16 +1562,9 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
 
         native_enum = None
 
-        if not we_are_generic_form and python_type is matched_on:
-            # if we have enumerated values, and the incoming python
-            # type is exactly the one that matched in the type map,
-            # then we use these enumerated values and dont try to parse
-            # what's incoming
-            enum_args = self._enums_argument
-
-        elif is_literal(python_type):
+        def process_literal(pt):
             # for a literal, where we need to get its contents, parse it out.
-            enum_args = typing_get_args(python_type)
+            enum_args = get_args(pt)
             bad_args = [arg for arg in enum_args if not isinstance(arg, str)]
             if bad_args:
                 raise exc.ArgumentError(
@@ -1515,6 +1573,42 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
                     f"provide an explicit Enum datatype for this Python type"
                 )
             native_enum = False
+            return enum_args, native_enum
+
+        if not we_are_generic_form and python_type is matched_on:
+            # if we have enumerated values, and the incoming python
+            # type is exactly the one that matched in the type map,
+            # then we use these enumerated values and dont try to parse
+            # what's incoming
+            enum_args = self._enums_argument
+
+        elif is_literal(python_type):
+            enum_args, native_enum = process_literal(python_type)
+        elif is_pep695(python_type):
+            value = python_type.__value__
+            if is_pep695(value):
+                new_value = value
+                while is_pep695(new_value):
+                    new_value = new_value.__value__
+                if is_literal(new_value):
+                    value = new_value
+                    warn_deprecated(
+                        f"Mapping recursive TypeAliasType '{python_type}' "
+                        "that resolve to literal to generate an Enum is "
+                        "deprecated. SQLAlchemy 2.1 will not support this "
+                        "use case. Please avoid using recursing "
+                        "TypeAliasType.",
+                        "2.0",
+                    )
+            if not is_literal(value):
+                raise exc.ArgumentError(
+                    f"Can't associate TypeAliasType '{python_type}' to an "
+                    "Enum since it's not a direct alias of a Literal. Only "
+                    "aliases in this form `type my_alias = Literal['a', "
+                    "'b']` are supported when generating Enums."
+                )
+            enum_args, native_enum = process_literal(value)
+
         elif isinstance(python_type, type) and issubclass(
             python_type, enum.Enum
         ):
@@ -1537,7 +1631,12 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
             self._generic_type_affinity(_enums=enum_args, **kw),  # type: ignore  # noqa: E501
         )
 
-    def _setup_for_values(self, values, objects, kw):
+    def _setup_for_values(
+        self,
+        values: Sequence[str],
+        objects: _EnumTupleArg,
+        kw: Any,
+    ) -> None:
         self.enums = list(values)
 
         self._valid_lookup = dict(zip(reversed(objects), reversed(values)))
@@ -1552,14 +1651,14 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
         )
 
     @property
-    def sort_key_function(self):
+    def sort_key_function(self):  # type: ignore[override]
         if self._sort_key_function is NO_ARG:
             return self._db_value_for_elem
         else:
             return self._sort_key_function
 
     @property
-    def native(self):
+    def native(self):  # type: ignore[override]
         return self.native_enum
 
     def _db_value_for_elem(self, elem):
@@ -1604,9 +1703,10 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
 
     comparator_factory = Comparator
 
-    def _object_value_for_elem(self, elem):
+    def _object_value_for_elem(self, elem: str) -> Union[str, enum.Enum]:
         try:
-            return self._object_lookup[elem]
+            # Value will not be None because key is not None
+            return self._object_lookup[elem]  # type: ignore[return-value]
         except KeyError as err:
             raise LookupError(
                 "'%s' is not among the defined enum values. "
@@ -1664,10 +1764,10 @@ class Enum(String, SchemaType, Emulated, TypeEngine[Union[str, enum.Enum]]):
         assert "_enums" in kw
         return impltype(**kw)
 
-    def adapt(self, impltype, **kw):
+    def adapt(self, cls, **kw):
         kw["_enums"] = self._enums_argument
         kw["_disable_warnings"] = True
-        return super().adapt(impltype, **kw)
+        return super().adapt(cls, **kw)
 
     def _should_create_constraint(self, compiler, **kw):
         if not self._is_impl_for_variant(compiler.dialect, kw):
@@ -1903,6 +2003,13 @@ class Boolean(SchemaType, Emulated, TypeEngine[bool]):
         if _adapted_from:
             self.dispatch = self.dispatch._join(_adapted_from.dispatch)
 
+    def copy(self, **kw):
+        # override SchemaType.copy() to not include to_metadata logic
+        return self.adapt(
+            cast("Type[TypeEngine[Any]]", self.__class__),
+            _create_events=True,
+        )
+
     def _should_create_constraint(self, compiler, **kw):
         if not self._is_impl_for_variant(compiler.dialect, kw):
             return False
@@ -2007,10 +2114,9 @@ class _AbstractInterval(HasExpressionLookup, TypeEngine[dt.timedelta]):
 class Interval(Emulated, _AbstractInterval, TypeDecorator[dt.timedelta]):
     """A type for ``datetime.timedelta()`` objects.
 
-    The Interval type deals with ``datetime.timedelta`` objects.  In
-    PostgreSQL and Oracle, the native ``INTERVAL`` type is used; for others,
-    the value is stored as a date which is relative to the "epoch"
-    (Jan. 1, 1970).
+    The Interval type deals with ``datetime.timedelta`` objects.  In PostgreSQL
+    and Oracle Database, the native ``INTERVAL`` type is used; for others, the
+    value is stored as a date which is relative to the "epoch" (Jan. 1, 1970).
 
     Note that the ``Interval`` type does not currently provide date arithmetic
     operations on platforms which do not support interval types natively. Such
@@ -2035,16 +2141,16 @@ class Interval(Emulated, _AbstractInterval, TypeDecorator[dt.timedelta]):
 
         :param native: when True, use the actual
           INTERVAL type provided by the database, if
-          supported (currently PostgreSQL, Oracle).
+          supported (currently PostgreSQL, Oracle Database).
           Otherwise, represent the interval data as
           an epoch value regardless.
 
         :param second_precision: For native interval types
           which support a "fractional seconds precision" parameter,
-          i.e. Oracle and PostgreSQL
+          i.e. Oracle Database and PostgreSQL
 
         :param day_precision: for native interval types which
-          support a "day precision" parameter, i.e. Oracle.
+          support a "day precision" parameter, i.e. Oracle Database.
 
         """
         super().__init__()
@@ -2154,15 +2260,16 @@ class JSON(Indexable, TypeEngine[Any]):
 
     The :class:`_types.JSON` type stores arbitrary JSON format data, e.g.::
 
-        data_table = Table('data_table', metadata,
-            Column('id', Integer, primary_key=True),
-            Column('data', JSON)
+        data_table = Table(
+            "data_table",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("data", JSON),
         )
 
         with engine.connect() as conn:
             conn.execute(
-                data_table.insert(),
-                {"data": {"key1": "value1", "key2": "value2"}}
+                data_table.insert(), {"data": {"key1": "value1", "key2": "value2"}}
             )
 
     **JSON-Specific Expression Operators**
@@ -2172,7 +2279,7 @@ class JSON(Indexable, TypeEngine[Any]):
 
     * Keyed index operations::
 
-        data_table.c.data['some key']
+        data_table.c.data["some key"]
 
     * Integer index operations::
 
@@ -2180,7 +2287,7 @@ class JSON(Indexable, TypeEngine[Any]):
 
     * Path index operations::
 
-        data_table.c.data[('key_1', 'key_2', 5, ..., 'key_n')]
+        data_table.c.data[("key_1", "key_2", 5, ..., "key_n")]
 
     * Data casters for specific JSON element types, subsequent to an index
       or path operation being invoked::
@@ -2235,13 +2342,12 @@ class JSON(Indexable, TypeEngine[Any]):
 
            from sqlalchemy import cast, type_coerce
            from sqlalchemy import String, JSON
-           cast(
-               data_table.c.data['some_key'], String
-           ) == type_coerce(55, JSON)
+
+           cast(data_table.c.data["some_key"], String) == type_coerce(55, JSON)
 
         The above case now works directly as::
 
-            data_table.c.data['some_key'].as_integer() == 5
+            data_table.c.data["some_key"].as_integer() == 5
 
         For details on the previous comparison approach within the 1.3.x
         series, see the documentation for SQLAlchemy 1.2 or the included HTML
@@ -2272,6 +2378,7 @@ class JSON(Indexable, TypeEngine[Any]):
     should be SQL NULL as opposed to JSON ``"null"``::
 
         from sqlalchemy import null
+
         conn.execute(table.insert(), {"json_value": null()})
 
     To insert or select against a value that is JSON ``"null"``, use the
@@ -2304,7 +2411,8 @@ class JSON(Indexable, TypeEngine[Any]):
 
         engine = create_engine(
             "sqlite://",
-            json_serializer=lambda obj: json.dumps(obj, ensure_ascii=False))
+            json_serializer=lambda obj: json.dumps(obj, ensure_ascii=False),
+        )
 
     .. versionchanged:: 1.3.7
 
@@ -2322,7 +2430,7 @@ class JSON(Indexable, TypeEngine[Any]):
 
         :class:`sqlalchemy.dialects.sqlite.JSON`
 
-    """
+    """  # noqa: E501
 
     __visit_name__ = "JSON"
 
@@ -2356,8 +2464,7 @@ class JSON(Indexable, TypeEngine[Any]):
     transparent method is to use :func:`_expression.text`::
 
         Table(
-            'my_table', metadata,
-            Column('json_data', JSON, default=text("'null'"))
+            "my_table", metadata, Column("json_data", JSON, default=text("'null'"))
         )
 
     While it is possible to use :attr:`_types.JSON.NULL` in this context, the
@@ -2369,7 +2476,7 @@ class JSON(Indexable, TypeEngine[Any]):
     generated defaults.
 
 
-    """
+    """  # noqa: E501
 
     def __init__(self, none_as_null: bool = False):
         """Construct a :class:`_types.JSON` type.
@@ -2382,6 +2489,7 @@ class JSON(Indexable, TypeEngine[Any]):
          as SQL NULL::
 
              from sqlalchemy import null
+
              conn.execute(table.insert(), {"data": null()})
 
          .. note::
@@ -2412,17 +2520,21 @@ class JSON(Indexable, TypeEngine[Any]):
         _integer = Integer()
         _string = String()
 
-        def string_bind_processor(self, dialect):
+        def string_bind_processor(
+            self, dialect: Dialect
+        ) -> Optional[_BindProcessorType[str]]:
             return self._string._cached_bind_processor(dialect)
 
-        def string_literal_processor(self, dialect):
+        def string_literal_processor(
+            self, dialect: Dialect
+        ) -> Optional[_LiteralProcessorType[str]]:
             return self._string._cached_literal_processor(dialect)
 
-        def bind_processor(self, dialect):
+        def bind_processor(self, dialect: Dialect) -> _BindProcessorType[Any]:
             int_processor = self._integer._cached_bind_processor(dialect)
             string_processor = self.string_bind_processor(dialect)
 
-            def process(value):
+            def process(value: Optional[Any]) -> Any:
                 if int_processor and isinstance(value, int):
                     value = int_processor(value)
                 elif string_processor and isinstance(value, str):
@@ -2431,11 +2543,13 @@ class JSON(Indexable, TypeEngine[Any]):
 
             return process
 
-        def literal_processor(self, dialect):
+        def literal_processor(
+            self, dialect: Dialect
+        ) -> _LiteralProcessorType[Any]:
             int_processor = self._integer._cached_literal_processor(dialect)
             string_processor = self.string_literal_processor(dialect)
 
-            def process(value):
+            def process(value: Optional[Any]) -> Any:
                 if int_processor and isinstance(value, int):
                     value = int_processor(value)
                 elif string_processor and isinstance(value, str):
@@ -2486,6 +2600,8 @@ class JSON(Indexable, TypeEngine[Any]):
 
         __slots__ = ()
 
+        type: JSON
+
         def _setup_getitem(self, index):
             if not isinstance(index, str) and isinstance(
                 index, collections_abc.Sequence
@@ -2523,15 +2639,13 @@ class JSON(Indexable, TypeEngine[Any]):
 
             e.g.::
 
-                stmt = select(
-                    mytable.c.json_column['some_data'].as_boolean()
-                ).where(
-                    mytable.c.json_column['some_data'].as_boolean() == True
+                stmt = select(mytable.c.json_column["some_data"].as_boolean()).where(
+                    mytable.c.json_column["some_data"].as_boolean() == True
                 )
 
             .. versionadded:: 1.3.11
 
-            """
+            """  # noqa: E501
             return self._binary_w_type(Boolean(), "as_boolean")
 
         def as_string(self):
@@ -2542,16 +2656,13 @@ class JSON(Indexable, TypeEngine[Any]):
 
             e.g.::
 
-                stmt = select(
-                    mytable.c.json_column['some_data'].as_string()
-                ).where(
-                    mytable.c.json_column['some_data'].as_string() ==
-                    'some string'
+                stmt = select(mytable.c.json_column["some_data"].as_string()).where(
+                    mytable.c.json_column["some_data"].as_string() == "some string"
                 )
 
             .. versionadded:: 1.3.11
 
-            """
+            """  # noqa: E501
             return self._binary_w_type(Unicode(), "as_string")
 
         def as_integer(self):
@@ -2562,15 +2673,13 @@ class JSON(Indexable, TypeEngine[Any]):
 
             e.g.::
 
-                stmt = select(
-                    mytable.c.json_column['some_data'].as_integer()
-                ).where(
-                    mytable.c.json_column['some_data'].as_integer() == 5
+                stmt = select(mytable.c.json_column["some_data"].as_integer()).where(
+                    mytable.c.json_column["some_data"].as_integer() == 5
                 )
 
             .. versionadded:: 1.3.11
 
-            """
+            """  # noqa: E501
             return self._binary_w_type(Integer(), "as_integer")
 
         def as_float(self):
@@ -2581,15 +2690,13 @@ class JSON(Indexable, TypeEngine[Any]):
 
             e.g.::
 
-                stmt = select(
-                    mytable.c.json_column['some_data'].as_float()
-                ).where(
-                    mytable.c.json_column['some_data'].as_float() == 29.75
+                stmt = select(mytable.c.json_column["some_data"].as_float()).where(
+                    mytable.c.json_column["some_data"].as_float() == 29.75
                 )
 
             .. versionadded:: 1.3.11
 
-            """
+            """  # noqa: E501
             return self._binary_w_type(Float(), "as_float")
 
         def as_numeric(self, precision, scale, asdecimal=True):
@@ -2600,16 +2707,13 @@ class JSON(Indexable, TypeEngine[Any]):
 
             e.g.::
 
-                stmt = select(
-                    mytable.c.json_column['some_data'].as_numeric(10, 6)
-                ).where(
-                    mytable.c.
-                    json_column['some_data'].as_numeric(10, 6) == 29.75
+                stmt = select(mytable.c.json_column["some_data"].as_numeric(10, 6)).where(
+                    mytable.c.json_column["some_data"].as_numeric(10, 6) == 29.75
                 )
 
             .. versionadded:: 1.4.0b2
 
-            """
+            """  # noqa: E501
             return self._binary_w_type(
                 Numeric(precision, scale, asdecimal=asdecimal), "as_numeric"
             )
@@ -2622,7 +2726,7 @@ class JSON(Indexable, TypeEngine[Any]):
 
             e.g.::
 
-                stmt = select(mytable.c.json_column['some_data'].as_json())
+                stmt = select(mytable.c.json_column["some_data"].as_json())
 
             This is typically the default behavior of indexed elements in any
             case.
@@ -2657,7 +2761,7 @@ class JSON(Indexable, TypeEngine[Any]):
     def python_type(self):
         return dict
 
-    @property  # type: ignore  # mypy property bug
+    @property
     def should_evaluate_none(self):
         """Alias of :attr:`_types.JSON.none_as_null`"""
         return not self.none_as_null
@@ -2719,7 +2823,7 @@ class JSON(Indexable, TypeEngine[Any]):
 
 
 class ARRAY(
-    SchemaEventTarget, Indexable, Concatenable, TypeEngine[Sequence[Any]]
+    SchemaEventTarget, Indexable, Concatenable, TypeEngine[Sequence[_T]]
 ):
     """Represent a SQL Array type.
 
@@ -2740,26 +2844,21 @@ class ARRAY(
     An :class:`_types.ARRAY` type is constructed given the "type"
     of element::
 
-        mytable = Table("mytable", metadata,
-                Column("data", ARRAY(Integer))
-            )
+        mytable = Table("mytable", metadata, Column("data", ARRAY(Integer)))
 
     The above type represents an N-dimensional array,
     meaning a supporting backend such as PostgreSQL will interpret values
     with any number of dimensions automatically.   To produce an INSERT
     construct that passes in a 1-dimensional array of integers::
 
-        connection.execute(
-                mytable.insert(),
-                {"data": [1,2,3]}
-        )
+        connection.execute(mytable.insert(), {"data": [1, 2, 3]})
 
     The :class:`_types.ARRAY` type can be constructed given a fixed number
     of dimensions::
 
-        mytable = Table("mytable", metadata,
-                Column("data", ARRAY(Integer, dimensions=2))
-            )
+        mytable = Table(
+            "mytable", metadata, Column("data", ARRAY(Integer, dimensions=2))
+        )
 
     Sending a number of dimensions is optional, but recommended if the
     datatype is to represent arrays of more than one dimension.  This number
@@ -2793,10 +2892,9 @@ class ARRAY(
     as well as UPDATE statements when the :meth:`_expression.Update.values`
     method is used::
 
-        mytable.update().values({
-            mytable.c.data[5]: 7,
-            mytable.c.data[2:7]: [1, 2, 3]
-        })
+        mytable.update().values(
+            {mytable.c.data[5]: 7, mytable.c.data[2:7]: [1, 2, 3]}
+        )
 
     Indexed access is one-based by default;
     for zero-based index conversion, set :paramref:`_types.ARRAY.zero_indexes`.
@@ -2817,6 +2915,7 @@ class ARRAY(
 
             from sqlalchemy import ARRAY
             from sqlalchemy.ext.mutable import MutableList
+
 
             class SomeOrmClass(Base):
                 # ...
@@ -2847,7 +2946,7 @@ class ARRAY(
 
     def __init__(
         self,
-        item_type: _TypeEngineArgument[Any],
+        item_type: _TypeEngineArgument[_T],
         as_tuple: bool = False,
         dimensions: Optional[int] = None,
         zero_indexes: bool = False,
@@ -2856,7 +2955,7 @@ class ARRAY(
 
         E.g.::
 
-          Column('myarray', ARRAY(Integer))
+          Column("myarray", ARRAY(Integer))
 
         Arguments are:
 
@@ -2896,8 +2995,8 @@ class ARRAY(
         self.zero_indexes = zero_indexes
 
     class Comparator(
-        Indexable.Comparator[Sequence[Any]],
-        Concatenable.Comparator[Sequence[Any]],
+        Indexable.Comparator[Sequence[_CT]],
+        Concatenable.Comparator[Sequence[_CT]],
     ):
         """Define comparison operations for :class:`_types.ARRAY`.
 
@@ -2908,9 +3007,22 @@ class ARRAY(
 
         __slots__ = ()
 
-        type: ARRAY
+        type: ARRAY[_CT]
 
-        def _setup_getitem(self, index):
+        @overload
+        def _setup_getitem(
+            self, index: int
+        ) -> Tuple[OperatorType, int, TypeEngine[Any]]: ...
+
+        @overload
+        def _setup_getitem(
+            self, index: slice
+        ) -> Tuple[OperatorType, Slice, TypeEngine[Any]]: ...
+
+        def _setup_getitem(self, index: Union[int, slice]) -> Union[
+            Tuple[OperatorType, int, TypeEngine[Any]],
+            Tuple[OperatorType, Slice, TypeEngine[Any]],
+        ]:
             arr_type = self.type
 
             return_type: TypeEngine[Any]
@@ -2936,7 +3048,7 @@ class ARRAY(
 
                 return operators.getitem, index, return_type
 
-        def contains(self, *arg, **kw):
+        def contains(self, *arg: Any, **kw: Any) -> ColumnElement[bool]:
             """``ARRAY.contains()`` not implemented for the base ARRAY type.
             Use the dialect-specific ARRAY type.
 
@@ -2950,7 +3062,9 @@ class ARRAY(
             )
 
         @util.preload_module("sqlalchemy.sql.elements")
-        def any(self, other, operator=None):
+        def any(
+            self, other: Any, operator: Optional[OperatorType] = None
+        ) -> ColumnElement[bool]:
             """Return ``other operator ANY (array)`` clause.
 
             .. legacy:: This method is an :class:`_types.ARRAY` - specific
@@ -2965,9 +3079,7 @@ class ARRAY(
                 from sqlalchemy.sql import operators
 
                 conn.execute(
-                    select(table.c.data).where(
-                            table.c.data.any(7, operator=operators.lt)
-                        )
+                    select(table.c.data).where(table.c.data.any(7, operator=operators.lt))
                 )
 
             :param other: expression to be compared
@@ -2981,7 +3093,7 @@ class ARRAY(
 
                 :meth:`.types.ARRAY.Comparator.all`
 
-            """
+            """  # noqa: E501
             elements = util.preloaded.sql_elements
             operator = operator if operator else operators.eq
 
@@ -2999,7 +3111,9 @@ class ARRAY(
             )
 
         @util.preload_module("sqlalchemy.sql.elements")
-        def all(self, other, operator=None):
+        def all(
+            self, other: Any, operator: Optional[OperatorType] = None
+        ) -> ColumnElement[bool]:
             """Return ``other operator ALL (array)`` clause.
 
             .. legacy:: This method is an :class:`_types.ARRAY` - specific
@@ -3014,9 +3128,7 @@ class ARRAY(
                 from sqlalchemy.sql import operators
 
                 conn.execute(
-                    select(table.c.data).where(
-                            table.c.data.all(7, operator=operators.lt)
-                        )
+                    select(table.c.data).where(table.c.data.all(7, operator=operators.lt))
                 )
 
             :param other: expression to be compared
@@ -3030,7 +3142,7 @@ class ARRAY(
 
                 :meth:`.types.ARRAY.Comparator.any`
 
-            """
+            """  # noqa: E501
             elements = util.preloaded.sql_elements
             operator = operator if operator else operators.eq
 
@@ -3050,23 +3162,27 @@ class ARRAY(
     comparator_factory = Comparator
 
     @property
-    def hashable(self):
+    def hashable(self) -> bool:  # type: ignore[override]
         return self.as_tuple
 
     @property
-    def python_type(self):
+    def python_type(self) -> Type[Any]:
         return list
 
-    def compare_values(self, x, y):
-        return x == y
+    def compare_values(self, x: Any, y: Any) -> bool:
+        return x == y  # type: ignore[no-any-return]
 
-    def _set_parent(self, column, outer=False, **kw):
+    def _set_parent(
+        self, parent: SchemaEventTarget, outer: bool = False, **kw: Any
+    ) -> None:
         """Support SchemaEventTarget"""
 
         if not outer and isinstance(self.item_type, SchemaEventTarget):
-            self.item_type._set_parent(column, **kw)
+            self.item_type._set_parent(parent, **kw)
 
-    def _set_parent_with_dispatch(self, parent):
+    def _set_parent_with_dispatch(
+        self, parent: SchemaEventTarget, **kw: Any
+    ) -> None:
         """Support SchemaEventTarget"""
 
         super()._set_parent_with_dispatch(parent, outer=True)
@@ -3074,17 +3190,19 @@ class ARRAY(
         if isinstance(self.item_type, SchemaEventTarget):
             self.item_type._set_parent_with_dispatch(parent)
 
-    def literal_processor(self, dialect):
+    def literal_processor(
+        self, dialect: Dialect
+    ) -> Optional[_LiteralProcessorType[_T]]:
         item_proc = self.item_type.dialect_impl(dialect).literal_processor(
             dialect
         )
         if item_proc is None:
             return None
 
-        def to_str(elements):
+        def to_str(elements: Iterable[Any]) -> str:
             return f"[{', '.join(elements)}]"
 
-        def process(value):
+        def process(value: Sequence[Any]) -> str:
             inner = self._apply_item_processor(
                 value, item_proc, self.dimensions, to_str
             )
@@ -3092,7 +3210,13 @@ class ARRAY(
 
         return process
 
-    def _apply_item_processor(self, arr, itemproc, dim, collection_callable):
+    def _apply_item_processor(
+        self,
+        arr: Sequence[Any],
+        itemproc: Optional[Callable[[Any], Any]],
+        dim: Optional[int],
+        collection_callable: Callable[[Iterable[Any]], _P],
+    ) -> _P:
         """Helper method that can be used by bind_processor(),
         literal_processor(), etc. to apply an item processor to elements of
         an array value, taking into account the 'dimensions' for this
@@ -3300,8 +3424,8 @@ class BIGINT(BigInteger):
 class TIMESTAMP(DateTime):
     """The SQL TIMESTAMP type.
 
-    :class:`_types.TIMESTAMP` datatypes have support for timezone
-    storage on some backends, such as PostgreSQL and Oracle.  Use the
+    :class:`_types.TIMESTAMP` datatypes have support for timezone storage on
+    some backends, such as PostgreSQL and Oracle Database.  Use the
     :paramref:`~types.TIMESTAMP.timezone` argument in order to enable
     "TIMESTAMP WITH TIMEZONE" for these backends.
 
@@ -3353,7 +3477,7 @@ class TEXT(Text):
 class CLOB(Text):
     """The CLOB type.
 
-    This type is found in Oracle and Informix.
+    This type is found in Oracle Database and Informix.
     """
 
     __visit_name__ = "CLOB"
@@ -3519,14 +3643,13 @@ class Uuid(Emulated, TypeEngine[_UUID_RETURN]):
         t = Table(
             "t",
             metadata_obj,
-            Column('uuid_data', Uuid, primary_key=True),
-            Column("other_data", String)
+            Column("uuid_data", Uuid, primary_key=True),
+            Column("other_data", String),
         )
 
         with engine.begin() as conn:
             conn.execute(
-                t.insert(),
-                {"uuid_data": uuid.uuid4(), "other_data", "some data"}
+                t.insert(), {"uuid_data": uuid.uuid4(), "other_data": "some data"}
             )
 
     To have the :class:`_sqltypes.Uuid` datatype work with string-based
@@ -3540,10 +3663,11 @@ class Uuid(Emulated, TypeEngine[_UUID_RETURN]):
         :class:`_sqltypes.UUID` - represents exactly the ``UUID`` datatype
         without any backend-agnostic behaviors.
 
-    """
+    """  # noqa: E501
 
     __visit_name__ = "uuid"
 
+    length: Optional[int] = None
     collation: Optional[str] = None
 
     @overload
@@ -3584,7 +3708,7 @@ class Uuid(Emulated, TypeEngine[_UUID_RETURN]):
         return _python_UUID if self.as_uuid else str
 
     @property
-    def native(self):
+    def native(self):  # type: ignore[override]
         return self.native_uuid
 
     def coerce_compared_value(self, op, value):
@@ -3595,7 +3719,9 @@ class Uuid(Emulated, TypeEngine[_UUID_RETURN]):
         else:
             return super().coerce_compared_value(op, value)
 
-    def bind_processor(self, dialect):
+    def bind_processor(
+        self, dialect: Dialect
+    ) -> Optional[_BindProcessorType[_UUID_RETURN]]:
         character_based_uuid = (
             not dialect.supports_native_uuid or not self.native_uuid
         )

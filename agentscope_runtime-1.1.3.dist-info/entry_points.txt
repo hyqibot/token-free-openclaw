@@ -1,0 +1,7 @@
+[console_scripts]
+agentscope = agentscope_runtime.cli.cli:main
+modelstudio-mcp-server = agentscope_runtime.tools.cli.modelstudio_mcp_server:main
+runtime-fc-deploy = agentscope_runtime.engine.deployers.cli_fc_deploy:main
+runtime-sandbox-builder = agentscope_runtime.sandbox.build:main
+runtime-sandbox-mcp = agentscope_runtime.sandbox.mcp_server:main
+runtime-sandbox-server = agentscope_runtime.sandbox.manager.server.app:main

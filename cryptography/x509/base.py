@@ -9,10 +9,11 @@ import datetime
 import os
 import typing
 import warnings
+from collections.abc import Iterable
 
 from cryptography import utils
 from cryptography.hazmat.bindings._rust import x509 as rust_x509
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import (
     dsa,
     ec,
@@ -25,7 +26,6 @@ from cryptography.hazmat.primitives.asymmetric import (
 )
 from cryptography.hazmat.primitives.asymmetric.types import (
     CertificateIssuerPrivateKeyTypes,
-    CertificateIssuerPublicKeyTypes,
     CertificatePublicKeyTypes,
 )
 from cryptography.x509.extensions import (
@@ -132,7 +132,7 @@ class Attribute:
 class Attributes:
     def __init__(
         self,
-        attributes: typing.Iterable[Attribute],
+        attributes: Iterable[Attribute],
     ) -> None:
         self._attributes = list(attributes)
 
@@ -160,159 +160,7 @@ class InvalidVersion(Exception):
         self.parsed_version = parsed_version
 
 
-class Certificate(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def fingerprint(self, algorithm: hashes.HashAlgorithm) -> bytes:
-        """
-        Returns bytes using digest passed.
-        """
-
-    @property
-    @abc.abstractmethod
-    def serial_number(self) -> int:
-        """
-        Returns certificate serial number
-        """
-
-    @property
-    @abc.abstractmethod
-    def version(self) -> Version:
-        """
-        Returns the certificate version
-        """
-
-    @abc.abstractmethod
-    def public_key(self) -> CertificatePublicKeyTypes:
-        """
-        Returns the public key
-        """
-
-    @property
-    @abc.abstractmethod
-    def not_valid_before(self) -> datetime.datetime:
-        """
-        Not before time (represented as UTC datetime)
-        """
-
-    @property
-    @abc.abstractmethod
-    def not_valid_before_utc(self) -> datetime.datetime:
-        """
-        Not before time (represented as a non-naive UTC datetime)
-        """
-
-    @property
-    @abc.abstractmethod
-    def not_valid_after(self) -> datetime.datetime:
-        """
-        Not after time (represented as UTC datetime)
-        """
-
-    @property
-    @abc.abstractmethod
-    def not_valid_after_utc(self) -> datetime.datetime:
-        """
-        Not after time (represented as a non-naive UTC datetime)
-        """
-
-    @property
-    @abc.abstractmethod
-    def issuer(self) -> Name:
-        """
-        Returns the issuer name object.
-        """
-
-    @property
-    @abc.abstractmethod
-    def subject(self) -> Name:
-        """
-        Returns the subject name object.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_hash_algorithm(
-        self,
-    ) -> hashes.HashAlgorithm | None:
-        """
-        Returns a HashAlgorithm corresponding to the type of the digest signed
-        in the certificate.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_algorithm_oid(self) -> ObjectIdentifier:
-        """
-        Returns the ObjectIdentifier of the signature algorithm.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_algorithm_parameters(
-        self,
-    ) -> None | padding.PSS | padding.PKCS1v15 | ec.ECDSA:
-        """
-        Returns the signature algorithm parameters.
-        """
-
-    @property
-    @abc.abstractmethod
-    def extensions(self) -> Extensions:
-        """
-        Returns an Extensions object.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature(self) -> bytes:
-        """
-        Returns the signature bytes.
-        """
-
-    @property
-    @abc.abstractmethod
-    def tbs_certificate_bytes(self) -> bytes:
-        """
-        Returns the tbsCertificate payload bytes as defined in RFC 5280.
-        """
-
-    @property
-    @abc.abstractmethod
-    def tbs_precertificate_bytes(self) -> bytes:
-        """
-        Returns the tbsCertificate payload bytes with the SCT list extension
-        stripped.
-        """
-
-    @abc.abstractmethod
-    def __eq__(self, other: object) -> bool:
-        """
-        Checks equality.
-        """
-
-    @abc.abstractmethod
-    def __hash__(self) -> int:
-        """
-        Computes a hash.
-        """
-
-    @abc.abstractmethod
-    def public_bytes(self, encoding: serialization.Encoding) -> bytes:
-        """
-        Serializes the certificate to PEM or DER format.
-        """
-
-    @abc.abstractmethod
-    def verify_directly_issued_by(self, issuer: Certificate) -> None:
-        """
-        This method verifies that certificate issuer name matches the
-        issuer subject name and that the certificate is signed by the
-        issuer's private key. No other validation is performed.
-        """
-
-
-# Runtime isinstance checks need this since the rust class is not a subclass.
-Certificate.register(rust_x509.Certificate)
+Certificate = rust_x509.Certificate
 
 
 class RevokedCertificate(metaclass=abc.ABCMeta):
@@ -384,261 +232,8 @@ class _RawRevokedCertificate(RevokedCertificate):
         return self._extensions
 
 
-class CertificateRevocationList(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def public_bytes(self, encoding: serialization.Encoding) -> bytes:
-        """
-        Serializes the CRL to PEM or DER format.
-        """
-
-    @abc.abstractmethod
-    def fingerprint(self, algorithm: hashes.HashAlgorithm) -> bytes:
-        """
-        Returns bytes using digest passed.
-        """
-
-    @abc.abstractmethod
-    def get_revoked_certificate_by_serial_number(
-        self, serial_number: int
-    ) -> RevokedCertificate | None:
-        """
-        Returns an instance of RevokedCertificate or None if the serial_number
-        is not in the CRL.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_hash_algorithm(
-        self,
-    ) -> hashes.HashAlgorithm | None:
-        """
-        Returns a HashAlgorithm corresponding to the type of the digest signed
-        in the certificate.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_algorithm_oid(self) -> ObjectIdentifier:
-        """
-        Returns the ObjectIdentifier of the signature algorithm.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_algorithm_parameters(
-        self,
-    ) -> None | padding.PSS | padding.PKCS1v15 | ec.ECDSA:
-        """
-        Returns the signature algorithm parameters.
-        """
-
-    @property
-    @abc.abstractmethod
-    def issuer(self) -> Name:
-        """
-        Returns the X509Name with the issuer of this CRL.
-        """
-
-    @property
-    @abc.abstractmethod
-    def next_update(self) -> datetime.datetime | None:
-        """
-        Returns the date of next update for this CRL.
-        """
-
-    @property
-    @abc.abstractmethod
-    def next_update_utc(self) -> datetime.datetime | None:
-        """
-        Returns the date of next update for this CRL as a non-naive UTC
-        datetime.
-        """
-
-    @property
-    @abc.abstractmethod
-    def last_update(self) -> datetime.datetime:
-        """
-        Returns the date of last update for this CRL.
-        """
-
-    @property
-    @abc.abstractmethod
-    def last_update_utc(self) -> datetime.datetime:
-        """
-        Returns the date of last update for this CRL as a non-naive UTC
-        datetime.
-        """
-
-    @property
-    @abc.abstractmethod
-    def extensions(self) -> Extensions:
-        """
-        Returns an Extensions object containing a list of CRL extensions.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature(self) -> bytes:
-        """
-        Returns the signature bytes.
-        """
-
-    @property
-    @abc.abstractmethod
-    def tbs_certlist_bytes(self) -> bytes:
-        """
-        Returns the tbsCertList payload bytes as defined in RFC 5280.
-        """
-
-    @abc.abstractmethod
-    def __eq__(self, other: object) -> bool:
-        """
-        Checks equality.
-        """
-
-    @abc.abstractmethod
-    def __len__(self) -> int:
-        """
-        Number of revoked certificates in the CRL.
-        """
-
-    @typing.overload
-    def __getitem__(self, idx: int) -> RevokedCertificate:
-        ...
-
-    @typing.overload
-    def __getitem__(self, idx: slice) -> list[RevokedCertificate]:
-        ...
-
-    @abc.abstractmethod
-    def __getitem__(
-        self, idx: int | slice
-    ) -> RevokedCertificate | list[RevokedCertificate]:
-        """
-        Returns a revoked certificate (or slice of revoked certificates).
-        """
-
-    @abc.abstractmethod
-    def __iter__(self) -> typing.Iterator[RevokedCertificate]:
-        """
-        Iterator over the revoked certificates
-        """
-
-    @abc.abstractmethod
-    def is_signature_valid(
-        self, public_key: CertificateIssuerPublicKeyTypes
-    ) -> bool:
-        """
-        Verifies signature of revocation list against given public key.
-        """
-
-
-CertificateRevocationList.register(rust_x509.CertificateRevocationList)
-
-
-class CertificateSigningRequest(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def __eq__(self, other: object) -> bool:
-        """
-        Checks equality.
-        """
-
-    @abc.abstractmethod
-    def __hash__(self) -> int:
-        """
-        Computes a hash.
-        """
-
-    @abc.abstractmethod
-    def public_key(self) -> CertificatePublicKeyTypes:
-        """
-        Returns the public key
-        """
-
-    @property
-    @abc.abstractmethod
-    def subject(self) -> Name:
-        """
-        Returns the subject name object.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_hash_algorithm(
-        self,
-    ) -> hashes.HashAlgorithm | None:
-        """
-        Returns a HashAlgorithm corresponding to the type of the digest signed
-        in the certificate.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_algorithm_oid(self) -> ObjectIdentifier:
-        """
-        Returns the ObjectIdentifier of the signature algorithm.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_algorithm_parameters(
-        self,
-    ) -> None | padding.PSS | padding.PKCS1v15 | ec.ECDSA:
-        """
-        Returns the signature algorithm parameters.
-        """
-
-    @property
-    @abc.abstractmethod
-    def extensions(self) -> Extensions:
-        """
-        Returns the extensions in the signing request.
-        """
-
-    @property
-    @abc.abstractmethod
-    def attributes(self) -> Attributes:
-        """
-        Returns an Attributes object.
-        """
-
-    @abc.abstractmethod
-    def public_bytes(self, encoding: serialization.Encoding) -> bytes:
-        """
-        Encodes the request to PEM or DER format.
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature(self) -> bytes:
-        """
-        Returns the signature bytes.
-        """
-
-    @property
-    @abc.abstractmethod
-    def tbs_certrequest_bytes(self) -> bytes:
-        """
-        Returns the PKCS#10 CertificationRequestInfo bytes as defined in RFC
-        2986.
-        """
-
-    @property
-    @abc.abstractmethod
-    def is_signature_valid(self) -> bool:
-        """
-        Verifies signature of signing request.
-        """
-
-    @abc.abstractmethod
-    def get_attribute_for_oid(self, oid: ObjectIdentifier) -> bytes:
-        """
-        Get the attribute value for a given OID.
-        """
-
-
-# Runtime isinstance checks need this since the rust class is not a subclass.
-CertificateSigningRequest.register(rust_x509.CertificateSigningRequest)
+CertificateRevocationList = rust_x509.CertificateRevocationList
+CertificateSigningRequest = rust_x509.CertificateSigningRequest
 
 
 load_pem_x509_certificate = rust_x509.load_pem_x509_certificate
@@ -736,6 +331,7 @@ class CertificateSigningRequestBuilder:
         backend: typing.Any = None,
         *,
         rsa_padding: padding.PSS | padding.PKCS1v15 | None = None,
+        ecdsa_deterministic: bool | None = None,
     ) -> CertificateSigningRequest:
         """
         Signs the request using the requestor's private key.
@@ -749,8 +345,18 @@ class CertificateSigningRequestBuilder:
             if not isinstance(private_key, rsa.RSAPrivateKey):
                 raise TypeError("Padding is only supported for RSA keys")
 
+        if ecdsa_deterministic is not None:
+            if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+                raise TypeError(
+                    "Deterministic ECDSA is only supported for EC keys"
+                )
+
         return rust_x509.create_x509_csr(
-            self, private_key, algorithm, rsa_padding
+            self,
+            private_key,
+            algorithm,
+            rsa_padding,
+            ecdsa_deterministic,
         )
 
 
@@ -864,7 +470,7 @@ class CertificateBuilder:
         # zero.
         if number.bit_length() >= 160:  # As defined in RFC 5280
             raise ValueError(
-                "The serial number should not be more than 159 " "bits."
+                "The serial number should not be more than 159 bits."
             )
         return CertificateBuilder(
             self._issuer_name,
@@ -916,8 +522,7 @@ class CertificateBuilder:
         time = _convert_to_naive_utc_time(time)
         if time < _EARLIEST_UTC_TIME:
             raise ValueError(
-                "The not valid after date must be on or after"
-                " 1950 January 1."
+                "The not valid after date must be on or after 1950 January 1."
             )
         if (
             self._not_valid_before is not None
@@ -966,6 +571,7 @@ class CertificateBuilder:
         backend: typing.Any = None,
         *,
         rsa_padding: padding.PSS | padding.PKCS1v15 | None = None,
+        ecdsa_deterministic: bool | None = None,
     ) -> Certificate:
         """
         Signs the certificate using the CA's private key.
@@ -994,8 +600,18 @@ class CertificateBuilder:
             if not isinstance(private_key, rsa.RSAPrivateKey):
                 raise TypeError("Padding is only supported for RSA keys")
 
+        if ecdsa_deterministic is not None:
+            if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+                raise TypeError(
+                    "Deterministic ECDSA is only supported for EC keys"
+                )
+
         return rust_x509.create_x509_certificate(
-            self, private_key, algorithm, rsa_padding
+            self,
+            private_key,
+            algorithm,
+            rsa_padding,
+            ecdsa_deterministic,
         )
 
 
@@ -1042,7 +658,7 @@ class CertificateRevocationListBuilder:
         last_update = _convert_to_naive_utc_time(last_update)
         if last_update < _EARLIEST_UTC_TIME:
             raise ValueError(
-                "The last update date must be on or after" " 1950 January 1."
+                "The last update date must be on or after 1950 January 1."
             )
         if self._next_update is not None and last_update > self._next_update:
             raise ValueError(
@@ -1066,7 +682,7 @@ class CertificateRevocationListBuilder:
         next_update = _convert_to_naive_utc_time(next_update)
         if next_update < _EARLIEST_UTC_TIME:
             raise ValueError(
-                "The last update date must be on or after" " 1950 January 1."
+                "The last update date must be on or after 1950 January 1."
             )
         if self._last_update is not None and next_update < self._last_update:
             raise ValueError(
@@ -1123,6 +739,7 @@ class CertificateRevocationListBuilder:
         backend: typing.Any = None,
         *,
         rsa_padding: padding.PSS | padding.PKCS1v15 | None = None,
+        ecdsa_deterministic: bool | None = None,
     ) -> CertificateRevocationList:
         if self._issuer_name is None:
             raise ValueError("A CRL must have an issuer name")
@@ -1139,8 +756,18 @@ class CertificateRevocationListBuilder:
             if not isinstance(private_key, rsa.RSAPrivateKey):
                 raise TypeError("Padding is only supported for RSA keys")
 
+        if ecdsa_deterministic is not None:
+            if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+                raise TypeError(
+                    "Deterministic ECDSA is only supported for EC keys"
+                )
+
         return rust_x509.create_x509_crl(
-            self, private_key, algorithm, rsa_padding
+            self,
+            private_key,
+            algorithm,
+            rsa_padding,
+            ecdsa_deterministic,
         )
 
 
@@ -1167,7 +794,7 @@ class RevokedCertificateBuilder:
         # zero.
         if number.bit_length() >= 160:  # As defined in RFC 5280
             raise ValueError(
-                "The serial number should not be more than 159 " "bits."
+                "The serial number should not be more than 159 bits."
             )
         return RevokedCertificateBuilder(
             number, self._revocation_date, self._extensions
@@ -1183,7 +810,7 @@ class RevokedCertificateBuilder:
         time = _convert_to_naive_utc_time(time)
         if time < _EARLIEST_UTC_TIME:
             raise ValueError(
-                "The revocation date must be on or after" " 1950 January 1."
+                "The revocation date must be on or after 1950 January 1."
             )
         return RevokedCertificateBuilder(
             self._serial_number, time, self._extensions

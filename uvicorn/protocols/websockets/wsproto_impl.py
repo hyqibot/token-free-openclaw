@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import typing
-from typing import Literal, cast
+from typing import Any, Literal, cast
 from urllib.parse import unquote
 
 import wsproto
@@ -15,18 +14,14 @@ from wsproto.utilities import LocalProtocolError, RemoteProtocolError
 from uvicorn._types import (
     ASGI3Application,
     ASGISendEvent,
-    WebSocketAcceptEvent,
-    WebSocketCloseEvent,
     WebSocketEvent,
-    WebSocketResponseBodyEvent,
-    WebSocketResponseStartEvent,
     WebSocketScope,
-    WebSocketSendEvent,
 )
 from uvicorn.config import Config
 from uvicorn.logging import TRACE_LOG_LEVEL
 from uvicorn.protocols.utils import (
     ClientDisconnected,
+    get_client_addr,
     get_local_addr,
     get_path_with_query_string,
     get_remote_addr,
@@ -40,7 +35,7 @@ class WSProtocol(asyncio.Protocol):
         self,
         config: Config,
         server_state: ServerState,
-        app_state: dict[str, typing.Any],
+        app_state: dict[str, Any],
         _loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         if not config.loaded:
@@ -60,7 +55,7 @@ class WSProtocol(asyncio.Protocol):
 
         # Connection state
         self.transport: asyncio.Transport = None  # type: ignore[assignment]
-        self.server: tuple[str, int] | None = None
+        self.server: tuple[str, int | None] | None = None
         self.client: tuple[str, int] | None = None
         self.scheme: Literal["wss", "ws"] = None  # type: ignore[assignment]
 
@@ -224,6 +219,7 @@ class WSProtocol(asyncio.Protocol):
         headers: list[tuple[bytes, bytes]] = [
             (b"content-type", b"text/plain; charset=utf-8"),
             (b"connection", b"close"),
+            (b"content-length", b"21"),
         ]
         output = self.conn.send(wsproto.events.RejectConnection(status_code=500, headers=headers, has_body=True))
         output += self.conn.send(wsproto.events.RejectData(data=b"Internal Server Error"))
@@ -233,31 +229,26 @@ class WSProtocol(asyncio.Protocol):
         try:
             result = await self.app(self.scope, self.receive, self.send)  # type: ignore[func-returns-value]
         except ClientDisconnected:
-            self.transport.close()  # pragma: full coverage
+            pass  # pragma: full coverage
         except BaseException:
             self.logger.exception("Exception in ASGI application\n")
             self.send_500_response()
-            self.transport.close()
         else:
             if not self.handshake_complete:
                 self.logger.error("ASGI callable returned without completing handshake.")
                 self.send_500_response()
-                self.transport.close()
             elif result is not None:
                 self.logger.error("ASGI callable should return None, but returned '%s'.", result)
-                self.transport.close()
+        self.transport.close()
 
     async def send(self, message: ASGISendEvent) -> None:
         await self.writable.wait()
 
-        message_type = message["type"]
-
         if not self.handshake_complete:
-            if message_type == "websocket.accept":
-                message = typing.cast(WebSocketAcceptEvent, message)
+            if message["type"] == "websocket.accept":
                 self.logger.info(
                     '%s - "WebSocket %s" [accepted]',
-                    self.scope["client"],
+                    get_client_addr(self.scope),
                     get_path_with_query_string(self.scope),
                 )
                 subprotocol = message.get("subprotocol")
@@ -276,11 +267,11 @@ class WSProtocol(asyncio.Protocol):
                     )
                     self.transport.write(output)
 
-            elif message_type == "websocket.close":
+            elif message["type"] == "websocket.close":
                 self.queue.put_nowait({"type": "websocket.disconnect", "code": 1006})
                 self.logger.info(
                     '%s - "WebSocket %s" 403',
-                    self.scope["client"],
+                    get_client_addr(self.scope),
                     get_path_with_query_string(self.scope),
                 )
                 self.handshake_complete = True
@@ -290,15 +281,14 @@ class WSProtocol(asyncio.Protocol):
                 self.transport.write(output)
                 self.transport.close()
 
-            elif message_type == "websocket.http.response.start":
-                message = typing.cast(WebSocketResponseStartEvent, message)
+            elif message["type"] == "websocket.http.response.start":
                 # ensure status code is in the valid range
                 if not (100 <= message["status"] < 600):
                     msg = "Invalid HTTP status code '%d' in response."
                     raise RuntimeError(msg % message["status"])
                 self.logger.info(
                     '%s - "WebSocket %s" %d',
-                    self.scope["client"],
+                    get_client_addr(self.scope),
                     get_path_with_query_string(self.scope),
                     message["status"],
                 )
@@ -313,17 +303,14 @@ class WSProtocol(asyncio.Protocol):
                 self.response_started = True
 
             else:
-                msg = (
+                raise RuntimeError(
                     "Expected ASGI message 'websocket.accept', 'websocket.close' "
-                    "or 'websocket.http.response.start' "
-                    "but got '%s'."
+                    f"or 'websocket.http.response.start' but got '{message['type']}'."
                 )
-                raise RuntimeError(msg % message_type)
 
         elif not self.close_sent and not self.response_started:
             try:
-                if message_type == "websocket.send":
-                    message = typing.cast(WebSocketSendEvent, message)
+                if message["type"] == "websocket.send":
                     bytes_data = message.get("bytes")
                     text_data = message.get("text")
                     data = text_data if bytes_data is None else bytes_data
@@ -331,8 +318,7 @@ class WSProtocol(asyncio.Protocol):
                     if not self.transport.is_closing():
                         self.transport.write(output)
 
-                elif message_type == "websocket.close":
-                    message = typing.cast(WebSocketCloseEvent, message)
+                elif message["type"] == "websocket.close":
                     self.close_sent = True
                     code = message.get("code", 1000)
                     reason = message.get("reason", "") or ""
@@ -343,13 +329,13 @@ class WSProtocol(asyncio.Protocol):
                         self.transport.close()
 
                 else:
-                    msg = "Expected ASGI message 'websocket.send' or 'websocket.close'," " but got '%s'."
-                    raise RuntimeError(msg % message_type)
+                    raise RuntimeError(
+                        f"Expected ASGI message 'websocket.send' or 'websocket.close', but got '{message['type']}'."
+                    )
             except LocalProtocolError as exc:
                 raise ClientDisconnected from exc
         elif self.response_started:
-            if message_type == "websocket.http.response.body":
-                message = typing.cast("WebSocketResponseBodyEvent", message)
+            if message["type"] == "websocket.http.response.body":
                 body_finished = not message.get("more_body", False)
                 reject_data = events.RejectData(data=message["body"], body_finished=body_finished)
                 output = self.conn.send(reject_data)
@@ -361,12 +347,10 @@ class WSProtocol(asyncio.Protocol):
                     self.transport.close()
 
             else:
-                msg = "Expected ASGI message 'websocket.http.response.body' " "but got '%s'."
-                raise RuntimeError(msg % message_type)
+                raise RuntimeError(f"Expected ASGI message 'websocket.http.response.body' but got '{message['type']}'.")
 
         else:
-            msg = "Unexpected ASGI message '%s', after sending 'websocket.close'."
-            raise RuntimeError(msg % message_type)
+            raise RuntimeError(f"Unexpected ASGI message '{message['type']}', after sending 'websocket.close'.")
 
     async def receive(self) -> WebSocketEvent:
         message = await self.queue.get()

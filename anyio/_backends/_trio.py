@@ -30,7 +30,6 @@ from typing import (
     Any,
     Generic,
     NoReturn,
-    ParamSpec,
     TypeVar,
     cast,
     overload,
@@ -84,6 +83,11 @@ from ..streams.memory import MemoryObjectSendStream
 
 if TYPE_CHECKING:
     from _typeshed import FileDescriptorLike
+
+if sys.version_info >= (3, 10):
+    from typing import ParamSpec
+else:
+    from typing_extensions import ParamSpec
 
 if sys.version_info >= (3, 11):
     from typing import TypeVarTuple, Unpack
@@ -883,7 +887,6 @@ class TestRunner(abc.TestRunner):
     def _call_in_runner_task(
         self,
         func: Callable[P, Awaitable[T_Retval]],
-        /,
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> T_Retval:

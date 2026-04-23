@@ -14,6 +14,7 @@ class ExtensionOID:
     SUBJECT_DIRECTORY_ATTRIBUTES = ObjectIdentifier("2.5.29.9")
     SUBJECT_KEY_IDENTIFIER = ObjectIdentifier("2.5.29.14")
     KEY_USAGE = ObjectIdentifier("2.5.29.15")
+    PRIVATE_KEY_USAGE_PERIOD = ObjectIdentifier("2.5.29.16")
     SUBJECT_ALTERNATIVE_NAME = ObjectIdentifier("2.5.29.17")
     ISSUER_ALTERNATIVE_NAME = ObjectIdentifier("2.5.29.18")
     BASIC_CONSTRAINTS = ObjectIdentifier("2.5.29.19")
@@ -39,6 +40,7 @@ class ExtensionOID:
     PRECERT_POISON = ObjectIdentifier("1.3.6.1.4.1.11129.2.4.3")
     SIGNED_CERTIFICATE_TIMESTAMPS = ObjectIdentifier("1.3.6.1.4.1.11129.2.4.5")
     MS_CERTIFICATE_TEMPLATE = ObjectIdentifier("1.3.6.1.4.1.311.21.7")
+    ADMISSIONS = ObjectIdentifier("1.3.36.8.3.3")
 
 
 class OCSPExtensionOID:
@@ -154,6 +156,33 @@ _SIG_OIDS_TO_HASH: dict[ObjectIdentifier, hashes.HashAlgorithm | None] = {
 }
 
 
+class HashAlgorithmOID:
+    SHA1 = ObjectIdentifier("1.3.14.3.2.26")
+    SHA224 = ObjectIdentifier("2.16.840.1.101.3.4.2.4")
+    SHA256 = ObjectIdentifier("2.16.840.1.101.3.4.2.1")
+    SHA384 = ObjectIdentifier("2.16.840.1.101.3.4.2.2")
+    SHA512 = ObjectIdentifier("2.16.840.1.101.3.4.2.3")
+    SHA3_224 = ObjectIdentifier("1.3.6.1.4.1.37476.3.2.1.99.7.224")
+    SHA3_256 = ObjectIdentifier("1.3.6.1.4.1.37476.3.2.1.99.7.256")
+    SHA3_384 = ObjectIdentifier("1.3.6.1.4.1.37476.3.2.1.99.7.384")
+    SHA3_512 = ObjectIdentifier("1.3.6.1.4.1.37476.3.2.1.99.7.512")
+    SHA3_224_NIST = ObjectIdentifier("2.16.840.1.101.3.4.2.7")
+    SHA3_256_NIST = ObjectIdentifier("2.16.840.1.101.3.4.2.8")
+    SHA3_384_NIST = ObjectIdentifier("2.16.840.1.101.3.4.2.9")
+    SHA3_512_NIST = ObjectIdentifier("2.16.840.1.101.3.4.2.10")
+
+
+class PublicKeyAlgorithmOID:
+    DSA = ObjectIdentifier("1.2.840.10040.4.1")
+    EC_PUBLIC_KEY = ObjectIdentifier("1.2.840.10045.2.1")
+    RSAES_PKCS1_v1_5 = ObjectIdentifier("1.2.840.113549.1.1.1")
+    RSASSA_PSS = ObjectIdentifier("1.2.840.113549.1.1.10")
+    X25519 = ObjectIdentifier("1.3.101.110")
+    X448 = ObjectIdentifier("1.3.101.111")
+    ED25519 = ObjectIdentifier("1.3.101.112")
+    ED448 = ObjectIdentifier("1.3.101.113")
+
+
 class ExtendedKeyUsageOID:
     SERVER_AUTH = ObjectIdentifier("1.3.6.1.5.5.7.3.1")
     CLIENT_AUTH = ObjectIdentifier("1.3.6.1.5.5.7.3.2")
@@ -165,7 +194,18 @@ class ExtendedKeyUsageOID:
     SMARTCARD_LOGON = ObjectIdentifier("1.3.6.1.4.1.311.20.2.2")
     KERBEROS_PKINIT_KDC = ObjectIdentifier("1.3.6.1.5.2.3.5")
     IPSEC_IKE = ObjectIdentifier("1.3.6.1.5.5.7.3.17")
+    BUNDLE_SECURITY = ObjectIdentifier("1.3.6.1.5.5.7.3.35")
     CERTIFICATE_TRANSPARENCY = ObjectIdentifier("1.3.6.1.4.1.11129.2.4.4")
+
+
+class OtherNameFormOID:
+    PERMANENT_IDENTIFIER = ObjectIdentifier("1.3.6.1.5.5.7.8.3")
+    HW_MODULE_NAME = ObjectIdentifier("1.3.6.1.5.5.7.8.4")
+    DNS_SRV = ObjectIdentifier("1.3.6.1.5.5.7.8.7")
+    NAI_REALM = ObjectIdentifier("1.3.6.1.5.5.7.8.8")
+    SMTP_UTF8_MAILBOX = ObjectIdentifier("1.3.6.1.5.5.7.8.9")
+    ACP_NODE_NAME = ObjectIdentifier("1.3.6.1.5.5.7.8.10")
+    BUNDLE_EID = ObjectIdentifier("1.3.6.1.5.5.7.8.11")
 
 
 class AuthorityInformationAccessOID:
@@ -225,7 +265,7 @@ _OID_NAMES = {
     SignatureAlgorithmOID.RSA_WITH_SHA256: "sha256WithRSAEncryption",
     SignatureAlgorithmOID.RSA_WITH_SHA384: "sha384WithRSAEncryption",
     SignatureAlgorithmOID.RSA_WITH_SHA512: "sha512WithRSAEncryption",
-    SignatureAlgorithmOID.RSASSA_PSS: "RSASSA-PSS",
+    SignatureAlgorithmOID.RSASSA_PSS: "rsassaPss",
     SignatureAlgorithmOID.ECDSA_WITH_SHA1: "ecdsa-with-SHA1",
     SignatureAlgorithmOID.ECDSA_WITH_SHA224: "ecdsa-with-SHA224",
     SignatureAlgorithmOID.ECDSA_WITH_SHA256: "ecdsa-with-SHA256",
@@ -245,6 +285,24 @@ _OID_NAMES = {
     SignatureAlgorithmOID.GOSTR3410_2012_WITH_3411_2012_512: (
         "GOST R 34.10-2012 with GOST R 34.11-2012 (512 bit)"
     ),
+    HashAlgorithmOID.SHA1: "sha1",
+    HashAlgorithmOID.SHA224: "sha224",
+    HashAlgorithmOID.SHA256: "sha256",
+    HashAlgorithmOID.SHA384: "sha384",
+    HashAlgorithmOID.SHA512: "sha512",
+    HashAlgorithmOID.SHA3_224: "sha3_224",
+    HashAlgorithmOID.SHA3_256: "sha3_256",
+    HashAlgorithmOID.SHA3_384: "sha3_384",
+    HashAlgorithmOID.SHA3_512: "sha3_512",
+    HashAlgorithmOID.SHA3_224_NIST: "sha3_224",
+    HashAlgorithmOID.SHA3_256_NIST: "sha3_256",
+    HashAlgorithmOID.SHA3_384_NIST: "sha3_384",
+    HashAlgorithmOID.SHA3_512_NIST: "sha3_512",
+    PublicKeyAlgorithmOID.DSA: "dsaEncryption",
+    PublicKeyAlgorithmOID.EC_PUBLIC_KEY: "id-ecPublicKey",
+    PublicKeyAlgorithmOID.RSAES_PKCS1_v1_5: "rsaEncryption",
+    PublicKeyAlgorithmOID.X25519: "X25519",
+    PublicKeyAlgorithmOID.X448: "X448",
     ExtendedKeyUsageOID.SERVER_AUTH: "serverAuth",
     ExtendedKeyUsageOID.CLIENT_AUTH: "clientAuth",
     ExtendedKeyUsageOID.CODE_SIGNING: "codeSigning",
@@ -256,6 +314,7 @@ _OID_NAMES = {
     ExtensionOID.SUBJECT_DIRECTORY_ATTRIBUTES: "subjectDirectoryAttributes",
     ExtensionOID.SUBJECT_KEY_IDENTIFIER: "subjectKeyIdentifier",
     ExtensionOID.KEY_USAGE: "keyUsage",
+    ExtensionOID.PRIVATE_KEY_USAGE_PERIOD: "privateKeyUsagePeriod",
     ExtensionOID.SUBJECT_ALTERNATIVE_NAME: "subjectAltName",
     ExtensionOID.ISSUER_ALTERNATIVE_NAME: "issuerAltName",
     ExtensionOID.BASIC_CONSTRAINTS: "basicConstraints",
@@ -267,6 +326,7 @@ _OID_NAMES = {
     ),
     ExtensionOID.PRECERT_POISON: "ctPoison",
     ExtensionOID.MS_CERTIFICATE_TEMPLATE: "msCertificateTemplate",
+    ExtensionOID.ADMISSIONS: "Admissions",
     CRLEntryExtensionOID.CRL_REASON: "cRLReason",
     CRLEntryExtensionOID.INVALIDITY_DATE: "invalidityDate",
     CRLEntryExtensionOID.CERTIFICATE_ISSUER: "certificateIssuer",

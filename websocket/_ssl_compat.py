@@ -1,54 +1,66 @@
 """
+_ssl_compat.py
 websocket - WebSocket client library for Python
 
-Copyright (C) 2010 Hiroki Ohtani(liris)
+Copyright 2025 engn33r
 
-    This library is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 2.1 of the License, or (at your option) any later version.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-    This library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    You should have received a copy of the GNU Lesser General Public
-    License along with this library; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor,
-    Boston, MA 02110-1335  USA
-
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 """
-__all__ = ["HAVE_SSL", "ssl", "SSLError", "SSLWantReadError", "SSLWantWriteError"]
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import ssl as _ssl_module
+    from ssl import (
+        SSLError as _SSLErrorType,
+        SSLEOFError as _SSLEOFErrorType,
+        SSLWantReadError as _SSLWantReadErrorType,
+        SSLWantWriteError as _SSLWantWriteErrorType,
+    )
+else:
+    _ssl_module = None
+    _SSLErrorType = None
+    _SSLEOFErrorType = None
+    _SSLWantReadErrorType = None
+    _SSLWantWriteErrorType = None
+
+__all__ = [
+    "HAVE_SSL",
+    "ssl",
+    "SSLError",
+    "SSLEOFError",
+    "SSLWantReadError",
+    "SSLWantWriteError",
+]
 
 try:
     import ssl
-    from ssl import SSLError
-    from ssl import SSLWantReadError
-    from ssl import SSLWantWriteError
-    if hasattr(ssl, 'SSLContext') and hasattr(ssl.SSLContext, 'check_hostname'):
-        HAVE_CONTEXT_CHECK_HOSTNAME = True
-    else:
-        HAVE_CONTEXT_CHECK_HOSTNAME = False
-        if hasattr(ssl, "match_hostname"):
-            from ssl import match_hostname
-        else:
-            from backports.ssl_match_hostname import match_hostname
-        __all__.append("match_hostname")
-    __all__.append("HAVE_CONTEXT_CHECK_HOSTNAME")
+    from ssl import SSLError, SSLEOFError, SSLWantReadError, SSLWantWriteError  # type: ignore[attr-defined]
 
     HAVE_SSL = True
 except ImportError:
-    # dummy class of SSLError for ssl none-support environment.
-    class SSLError(Exception):
+    # dummy class of SSLError for environment without ssl support
+    class SSLError(Exception):  # type: ignore[no-redef]
         pass
 
-    class SSLWantReadError(Exception):
+    class SSLEOFError(Exception):  # type: ignore[no-redef]
         pass
 
-    class SSLWantWriteError(Exception):
+    class SSLWantReadError(Exception):  # type: ignore[no-redef]
         pass
 
-    ssl = lambda: None
+    class SSLWantWriteError(Exception):  # type: ignore[no-redef]
+        pass
 
+    ssl = None  # type: ignore[assignment,no-redef]
     HAVE_SSL = False

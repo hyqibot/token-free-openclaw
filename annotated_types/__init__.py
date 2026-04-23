@@ -1,7 +1,8 @@
 import math
 import sys
+import types
 from dataclasses import dataclass
-from datetime import timezone
+from datetime import tzinfo
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, SupportsFloat, SupportsIndex, TypeVar, Union
 
 if sys.version_info < (3, 8):
@@ -53,7 +54,7 @@ __all__ = (
     '__version__',
 )
 
-__version__ = '0.6.0'
+__version__ = '0.7.0'
 
 
 T = TypeVar('T')
@@ -150,10 +151,10 @@ class Le(BaseMetadata):
 
 @runtime_checkable
 class GroupedMetadata(Protocol):
-    """A grouping of multiple BaseMetadata objects.
+    """A grouping of multiple objects, like typing.Unpack.
 
     `GroupedMetadata` on its own is not metadata and has no meaning.
-    All it the the constraint and metadata should be fully expressable
+    All of the constraints and metadata should be fully expressable
     in terms of the `BaseMetadata`'s returned by `GroupedMetadata.__iter__()`.
 
     Concrete implementations should override `GroupedMetadata.__iter__()`
@@ -165,7 +166,7 @@ class GroupedMetadata(Protocol):
     >>>     gt: float | None = None
     >>>     description: str | None = None
     ...
-    >>>     def __iter__(self) -> Iterable[BaseMetadata]:
+    >>>     def __iter__(self) -> Iterable[object]:
     >>>         if self.gt is not None:
     >>>             yield Gt(self.gt)
     >>>         if self.description is not None:
@@ -184,7 +185,7 @@ class GroupedMetadata(Protocol):
     def __is_annotated_types_grouped_metadata__(self) -> Literal[True]:
         return True
 
-    def __iter__(self) -> Iterator[BaseMetadata]:
+    def __iter__(self) -> Iterator[object]:
         ...
 
     if not TYPE_CHECKING:
@@ -196,7 +197,7 @@ class GroupedMetadata(Protocol):
             if cls.__iter__ is GroupedMetadata.__iter__:
                 raise TypeError("Can't subclass GroupedMetadata without implementing __iter__")
 
-        def __iter__(self) -> Iterator[BaseMetadata]:  # noqa: F811
+        def __iter__(self) -> Iterator[object]:  # noqa: F811
             raise NotImplementedError  # more helpful than "None has no attribute..." type errors
 
 
@@ -286,13 +287,36 @@ class Timezone(BaseMetadata):
     ``Timezone[...]`` (the ellipsis literal) expresses that the datetime must be
     tz-aware but any timezone is allowed.
 
-    You may also pass a specific timezone string or timezone object such as
+    You may also pass a specific timezone string or tzinfo object such as
     ``Timezone(timezone.utc)`` or ``Timezone("Africa/Abidjan")`` to express that
     you only allow a specific timezone, though we note that this is often
     a symptom of poor design.
     """
 
-    tz: Union[str, timezone, EllipsisType, None]
+    tz: Union[str, tzinfo, EllipsisType, None]
+
+
+@dataclass(frozen=True, **SLOTS)
+class Unit(BaseMetadata):
+    """Indicates that the value is a physical quantity with the specified unit.
+
+    It is intended for usage with numeric types, where the value represents the
+    magnitude of the quantity. For example, ``distance: Annotated[float, Unit('m')]``
+    or ``speed: Annotated[float, Unit('m/s')]``.
+
+    Interpretation of the unit string is left to the discretion of the consumer.
+    It is suggested to follow conventions established by python libraries that work
+    with physical quantities, such as
+
+    - ``pint`` : <https://pint.readthedocs.io/en/stable/>
+    - ``astropy.units``: <https://docs.astropy.org/en/stable/units/>
+
+    For indicating a quantity with a certain dimensionality but without a specific unit
+    it is recommended to use square brackets, e.g. `Annotated[float, Unit('[time]')]`.
+    Note, however, ``annotated_types`` itself makes no use of the unit string.
+    """
+
+    unit: str
 
 
 @dataclass(frozen=True, **SLOTS)
@@ -304,7 +328,7 @@ class Predicate(BaseMetadata):
 
     We provide a few predefined predicates for common string constraints:
     ``IsLower = Predicate(str.islower)``, ``IsUpper = Predicate(str.isupper)``, and
-    ``IsDigit = Predicate(str.isdigit)``. Users are encouraged to use methods which
+    ``IsDigits = Predicate(str.isdigit)``. Users are encouraged to use methods which
     can be given special handling, and avoid indirection like ``lambda s: s.lower()``.
 
     Some libraries might have special logic to handle certain predicates, e.g. by
@@ -314,10 +338,21 @@ class Predicate(BaseMetadata):
     We do not specify what behaviour should be expected for predicates that raise
     an exception.  For example `Annotated[int, Predicate(str.isdigit)]` might silently
     skip invalid constraints, or statically raise an error; or it might try calling it
-    and then propogate or discard the resulting exception.
+    and then propagate or discard the resulting exception.
     """
 
     func: Callable[[Any], bool]
+
+    def __repr__(self) -> str:
+        if getattr(self.func, "__name__", "<lambda>") == "<lambda>":
+            return f"{self.__class__.__name__}({self.func!r})"
+        if isinstance(self.func, (types.MethodType, types.BuiltinMethodType)) and (
+            namespace := getattr(self.func.__self__, "__name__", None)
+        ):
+            return f"{self.__class__.__name__}({namespace}.{self.func.__name__})"
+        if isinstance(self.func, type(str.isascii)):  # method descriptor
+            return f"{self.__class__.__name__}({self.func.__qualname__})"
+        return f"{self.__class__.__name__}({self.func.__name__})"
 
 
 @dataclass
@@ -342,7 +377,8 @@ Return True if the string is an uppercase string, False otherwise.
 
 A string is uppercase if all cased characters in the string are uppercase and there is at least one cased character in the string.
 """  # noqa: E501
-IsDigits = Annotated[_StrType, Predicate(str.isdigit)]
+IsDigit = Annotated[_StrType, Predicate(str.isdigit)]
+IsDigits = IsDigit  # type: ignore  # plural for backwards compatibility, see #63
 """
 Return True if the string is a digit string, False otherwise.
 

@@ -7,30 +7,22 @@ from __future__ import annotations
 import abc
 import typing
 
-from cryptography.exceptions import (
-    AlreadyFinalized,
-    AlreadyUpdated,
-    NotYetFinalized,
-)
+from cryptography.hazmat.bindings._rust import openssl as rust_openssl
 from cryptography.hazmat.primitives._cipheralgorithm import CipherAlgorithm
 from cryptography.hazmat.primitives.ciphers import modes
-
-if typing.TYPE_CHECKING:
-    from cryptography.hazmat.backends.openssl.ciphers import (
-        _CipherContext as _BackendCipherContext,
-    )
+from cryptography.utils import Buffer
 
 
 class CipherContext(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def update(self, data: bytes) -> bytes:
+    def update(self, data: Buffer) -> bytes:
         """
         Processes the provided bytes through the cipher and returns the results
         as bytes.
         """
 
     @abc.abstractmethod
-    def update_into(self, data: bytes, buf: bytes) -> int:
+    def update_into(self, data: Buffer, buf: Buffer) -> int:
         """
         Processes the provided bytes and writes the resulting data into the
         provided buffer. Returns the number of bytes written.
@@ -42,10 +34,18 @@ class CipherContext(metaclass=abc.ABCMeta):
         Returns the results of processing the final block as bytes.
         """
 
+    @abc.abstractmethod
+    def reset_nonce(self, nonce: bytes) -> None:
+        """
+        Resets the nonce for the cipher context to the provided value.
+        Raises an exception if it does not support reset or if the
+        provided nonce does not have a valid length.
+        """
+
 
 class AEADCipherContext(CipherContext, metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def authenticate_additional_data(self, data: bytes) -> None:
+    def authenticate_additional_data(self, data: Buffer) -> None:
         """
         Authenticates the provided bytes.
         """
@@ -97,14 +97,12 @@ class Cipher(typing.Generic[Mode]):
     @typing.overload
     def encryptor(
         self: Cipher[modes.ModeWithAuthenticationTag],
-    ) -> AEADEncryptionContext:
-        ...
+    ) -> AEADEncryptionContext: ...
 
     @typing.overload
     def encryptor(
         self: _CIPHER_TYPE,
-    ) -> CipherContext:
-        ...
+    ) -> CipherContext: ...
 
     def encryptor(self):
         if isinstance(self.mode, modes.ModeWithAuthenticationTag):
@@ -112,161 +110,37 @@ class Cipher(typing.Generic[Mode]):
                 raise ValueError(
                     "Authentication tag must be None when encrypting."
                 )
-        from cryptography.hazmat.backends.openssl.backend import backend
 
-        ctx = backend.create_symmetric_encryption_ctx(
+        return rust_openssl.ciphers.create_encryption_ctx(
             self.algorithm, self.mode
         )
-        return self._wrap_ctx(ctx, encrypt=True)
 
     @typing.overload
     def decryptor(
         self: Cipher[modes.ModeWithAuthenticationTag],
-    ) -> AEADDecryptionContext:
-        ...
+    ) -> AEADDecryptionContext: ...
 
     @typing.overload
     def decryptor(
         self: _CIPHER_TYPE,
-    ) -> CipherContext:
-        ...
+    ) -> CipherContext: ...
 
     def decryptor(self):
-        from cryptography.hazmat.backends.openssl.backend import backend
-
-        ctx = backend.create_symmetric_decryption_ctx(
+        return rust_openssl.ciphers.create_decryption_ctx(
             self.algorithm, self.mode
         )
-        return self._wrap_ctx(ctx, encrypt=False)
-
-    def _wrap_ctx(
-        self, ctx: _BackendCipherContext, encrypt: bool
-    ) -> AEADEncryptionContext | AEADDecryptionContext | CipherContext:
-        if isinstance(self.mode, modes.ModeWithAuthenticationTag):
-            if encrypt:
-                return _AEADEncryptionContext(ctx)
-            else:
-                return _AEADDecryptionContext(ctx)
-        else:
-            return _CipherContext(ctx)
 
 
 _CIPHER_TYPE = Cipher[
     typing.Union[
         modes.ModeWithNonce,
         modes.ModeWithTweak,
-        None,
         modes.ECB,
         modes.ModeWithInitializationVector,
+        None,
     ]
 ]
 
-
-class _CipherContext(CipherContext):
-    _ctx: _BackendCipherContext | None
-
-    def __init__(self, ctx: _BackendCipherContext) -> None:
-        self._ctx = ctx
-
-    def update(self, data: bytes) -> bytes:
-        if self._ctx is None:
-            raise AlreadyFinalized("Context was already finalized.")
-        return self._ctx.update(data)
-
-    def update_into(self, data: bytes, buf: bytes) -> int:
-        if self._ctx is None:
-            raise AlreadyFinalized("Context was already finalized.")
-        return self._ctx.update_into(data, buf)
-
-    def finalize(self) -> bytes:
-        if self._ctx is None:
-            raise AlreadyFinalized("Context was already finalized.")
-        data = self._ctx.finalize()
-        self._ctx = None
-        return data
-
-
-class _AEADCipherContext(AEADCipherContext):
-    _ctx: _BackendCipherContext | None
-    _tag: bytes | None
-
-    def __init__(self, ctx: _BackendCipherContext) -> None:
-        self._ctx = ctx
-        self._bytes_processed = 0
-        self._aad_bytes_processed = 0
-        self._tag = None
-        self._updated = False
-
-    def _check_limit(self, data_size: int) -> None:
-        if self._ctx is None:
-            raise AlreadyFinalized("Context was already finalized.")
-        self._updated = True
-        self._bytes_processed += data_size
-        if self._bytes_processed > self._ctx._mode._MAX_ENCRYPTED_BYTES:
-            raise ValueError(
-                "{} has a maximum encrypted byte limit of {}".format(
-                    self._ctx._mode.name, self._ctx._mode._MAX_ENCRYPTED_BYTES
-                )
-            )
-
-    def update(self, data: bytes) -> bytes:
-        self._check_limit(len(data))
-        # mypy needs this assert even though _check_limit already checked
-        assert self._ctx is not None
-        return self._ctx.update(data)
-
-    def update_into(self, data: bytes, buf: bytes) -> int:
-        self._check_limit(len(data))
-        # mypy needs this assert even though _check_limit already checked
-        assert self._ctx is not None
-        return self._ctx.update_into(data, buf)
-
-    def finalize(self) -> bytes:
-        if self._ctx is None:
-            raise AlreadyFinalized("Context was already finalized.")
-        data = self._ctx.finalize()
-        self._tag = self._ctx.tag
-        self._ctx = None
-        return data
-
-    def authenticate_additional_data(self, data: bytes) -> None:
-        if self._ctx is None:
-            raise AlreadyFinalized("Context was already finalized.")
-        if self._updated:
-            raise AlreadyUpdated("Update has been called on this context.")
-
-        self._aad_bytes_processed += len(data)
-        if self._aad_bytes_processed > self._ctx._mode._MAX_AAD_BYTES:
-            raise ValueError(
-                "{} has a maximum AAD byte limit of {}".format(
-                    self._ctx._mode.name, self._ctx._mode._MAX_AAD_BYTES
-                )
-            )
-
-        self._ctx.authenticate_additional_data(data)
-
-
-class _AEADDecryptionContext(_AEADCipherContext, AEADDecryptionContext):
-    def finalize_with_tag(self, tag: bytes) -> bytes:
-        if self._ctx is None:
-            raise AlreadyFinalized("Context was already finalized.")
-        if self._ctx._tag is not None:
-            raise ValueError(
-                "tag provided both in mode and in call with finalize_with_tag:"
-                " tag should only be provided once"
-            )
-        data = self._ctx.finalize_with_tag(tag)
-        self._tag = self._ctx.tag
-        self._ctx = None
-        return data
-
-
-class _AEADEncryptionContext(_AEADCipherContext, AEADEncryptionContext):
-    @property
-    def tag(self) -> bytes:
-        if self._ctx is not None:
-            raise NotYetFinalized(
-                "You must finalize encryption before " "getting the tag."
-            )
-        assert self._tag is not None
-        return self._tag
+CipherContext.register(rust_openssl.ciphers.CipherContext)
+AEADEncryptionContext.register(rust_openssl.ciphers.AEADEncryptionContext)
+AEADDecryptionContext.register(rust_openssl.ciphers.AEADDecryptionContext)

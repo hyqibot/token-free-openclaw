@@ -323,13 +323,13 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
             if self._self_reading_future is not None:
                 ov = self._self_reading_future._ov
                 self._self_reading_future.cancel()
-                # self_reading_future was just cancelled so if it hasn't been
-                # finished yet, it never will be (it's possible that it has
-                # already finished and its callback is waiting in the queue,
-                # where it could still happen if the event loop is restarted).
-                # Unregister it otherwise IocpProactor.close will wait for it
-                # forever
-                if ov is not None:
+                # self_reading_future always uses IOCP, so even though it's
+                # been cancelled, we need to make sure that the IOCP message
+                # is received so that the kernel is not holding on to the
+                # memory, possibly causing memory corruption later. Only
+                # unregister it if IO is complete in all respects. Otherwise
+                # we need another _poll() later to complete the IO.
+                if ov is not None and not ov.pending:
                     self._proactor._unregister(ov)
                 self._self_reading_future = None
 
@@ -366,6 +366,10 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
                     return
 
                 f = self._proactor.accept_pipe(pipe)
+            except BrokenPipeError:
+                if pipe and pipe.fileno() != -1:
+                    pipe.close()
+                self.call_soon(loop_accept_pipe)
             except OSError as exc:
                 if pipe and pipe.fileno() != -1:
                     self.call_exception_handler({
@@ -377,6 +381,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
                 elif self._debug:
                     logger.warning("Accept pipe failed on pipe %r",
                                    pipe, exc_info=True)
+                self.call_soon(loop_accept_pipe)
             except exceptions.CancelledError:
                 if pipe:
                     pipe.close()

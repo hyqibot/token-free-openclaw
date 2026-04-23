@@ -1,5 +1,5 @@
 # ext/asyncio/result.py
-# Copyright (C) 2020-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2020-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -93,6 +93,7 @@ class AsyncResult(_WithKeys, AsyncCommon[Row[_TP]]):
 
         self._metadata = real_result._metadata
         self._unique_filter_state = real_result._unique_filter_state
+        self._source_supports_scalars = real_result._source_supports_scalars
         self._post_creational_filter = None
 
         # BaseCursorResult pre-generates the "_row_getter".  Use that
@@ -333,11 +334,11 @@ class AsyncResult(_WithKeys, AsyncCommon[Row[_TP]]):
         """Return exactly one scalar result or raise an exception.
 
         This is equivalent to calling :meth:`_asyncio.AsyncResult.scalars` and
-        then :meth:`_asyncio.AsyncResult.one`.
+        then :meth:`_asyncio.AsyncScalarResult.one`.
 
         .. seealso::
 
-            :meth:`_asyncio.AsyncResult.one`
+            :meth:`_asyncio.AsyncScalarResult.one`
 
             :meth:`_asyncio.AsyncResult.scalars`
 
@@ -356,11 +357,11 @@ class AsyncResult(_WithKeys, AsyncCommon[Row[_TP]]):
         """Return exactly one scalar result or ``None``.
 
         This is equivalent to calling :meth:`_asyncio.AsyncResult.scalars` and
-        then :meth:`_asyncio.AsyncResult.one_or_none`.
+        then :meth:`_asyncio.AsyncScalarResult.one_or_none`.
 
         .. seealso::
 
-            :meth:`_asyncio.AsyncResult.one_or_none`
+            :meth:`_asyncio.AsyncScalarResult.one_or_none`
 
             :meth:`_asyncio.AsyncResult.scalars`
 
@@ -824,7 +825,7 @@ class AsyncTupleResult(AsyncCommon[_R], util.TypingOnly):
             """
             ...
 
-        async def __aiter__(self) -> AsyncIterator[_R]: ...
+        def __aiter__(self) -> AsyncIterator[_R]: ...
 
         async def __anext__(self) -> _R: ...
 
@@ -869,11 +870,11 @@ class AsyncTupleResult(AsyncCommon[_R], util.TypingOnly):
             """Return exactly one scalar result or raise an exception.
 
             This is equivalent to calling :meth:`_engine.Result.scalars`
-            and then :meth:`_engine.Result.one`.
+            and then :meth:`_engine.AsyncScalarResult.one`.
 
             .. seealso::
 
-                :meth:`_engine.Result.one`
+                :meth:`_engine.AsyncScalarResult.one`
 
                 :meth:`_engine.Result.scalars`
 
@@ -892,11 +893,11 @@ class AsyncTupleResult(AsyncCommon[_R], util.TypingOnly):
             """Return exactly one or no scalar result.
 
             This is equivalent to calling :meth:`_engine.Result.scalars`
-            and then :meth:`_engine.Result.one_or_none`.
+            and then :meth:`_engine.AsyncScalarResult.one_or_none`.
 
             .. seealso::
 
-                :meth:`_engine.Result.one_or_none`
+                :meth:`_engine.AsyncScalarResult.one_or_none`
 
                 :meth:`_engine.Result.scalars`
 
@@ -958,4 +959,7 @@ async def _ensure_sync_result(result: _RT, calling_method: Any) -> _RT:
                 calling_method.__self__.__class__.__name__,
             )
         )
+
+    if is_cursor and cursor_result.cursor is not None:
+        await cursor_result.cursor._async_soft_close()
     return result

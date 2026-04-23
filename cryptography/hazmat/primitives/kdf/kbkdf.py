@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import typing
+from collections.abc import Callable
 
 from cryptography import utils
 from cryptography.exceptions import (
@@ -36,7 +37,7 @@ class CounterLocation(utils.Enum):
 class _KBKDFDeriver:
     def __init__(
         self,
-        prf: typing.Callable,
+        prf: Callable,
         mode: Mode,
         length: int,
         rlen: int,
@@ -75,7 +76,7 @@ class _KBKDFDeriver:
 
         if (label or context) and fixed:
             raise ValueError(
-                "When supplying fixed data, " "label and context are ignored."
+                "When supplying fixed data, label and context are ignored."
             )
 
         if rlen is None or not self._valid_byte_length(rlen):
@@ -86,6 +87,9 @@ class _KBKDFDeriver:
 
         if llen is not None and not isinstance(llen, int):
             raise TypeError("llen must be an integer")
+
+        if llen == 0:
+            raise ValueError("llen must be non-zero")
 
         if label is None:
             label = b""
@@ -113,11 +117,11 @@ class _KBKDFDeriver:
             raise TypeError("value must be of type int")
 
         value_bin = utils.int_to_bytes(1, value)
-        if not 1 <= len(value_bin) <= 4:
-            return False
-        return True
+        return 1 <= len(value_bin) <= 4
 
-    def derive(self, key_material: bytes, prf_output_size: int) -> bytes:
+    def derive(
+        self, key_material: utils.Buffer, prf_output_size: int
+    ) -> bytes:
         if self._used:
             raise AlreadyFinalized
 
@@ -224,7 +228,7 @@ class KBKDFHMAC(KeyDerivationFunction):
     def _prf(self, key_material: bytes) -> hmac.HMAC:
         return hmac.HMAC(key_material, self._algorithm)
 
-    def derive(self, key_material: bytes) -> bytes:
+    def derive(self, key_material: utils.Buffer) -> bytes:
         return self._deriver.derive(key_material, self._algorithm.digest_size)
 
     def verify(self, key_material: bytes, expected_key: bytes) -> None:
@@ -277,7 +281,7 @@ class KBKDFCMAC(KeyDerivationFunction):
 
         return cmac.CMAC(self._cipher)
 
-    def derive(self, key_material: bytes) -> bytes:
+    def derive(self, key_material: utils.Buffer) -> bytes:
         self._cipher = self._algorithm(key_material)
 
         assert self._cipher is not None

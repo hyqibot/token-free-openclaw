@@ -287,14 +287,7 @@ class Gnu95FCompiler(GnuFCompiler):
                     self.executables[key].append('-mno-cygwin')
         return v
 
-    possible_executables = []
-    _env_gfortran = os.getenv('GFORTRAN')
-    if _env_gfortran is not None:
-        possible_executables.append(os.path.basename(_env_gfortran))
-    possible_executables.extend(['gfortran', 'f95'])
-
-    if os.getenv('GFORTRAN'):
-        possible_executables.append(os.path.basename(os.getenv('GFORTRAN')))
+    possible_executables = ['gfortran', 'f95']
     executables = {
         'version_cmd'  : ["<F90>", "-dumpversion"],
         'compiler_f77' : [None, "-Wall", "-g", "-ffixed-form",

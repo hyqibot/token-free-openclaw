@@ -8,7 +8,7 @@ import pytest
 from numpy.testing import (
         assert_, assert_raises, assert_equal, assert_warns,
         assert_no_warnings, assert_array_equal, assert_array_almost_equal,
-        suppress_warnings
+        suppress_warnings, IS_WASM
         )
 
 from numpy.random import MT19937, PCG64
@@ -24,7 +24,7 @@ INT_FUNCS = {'binomial': (100.0, 0.6),
              'zipf': (2,),
              }
 
-if np.iinfo(int).max < 2**32:
+if np.iinfo(np.long).max < 2**32:
     # Windows and some 32-bit platforms, e.g., ARM
     INT_FUNC_HASHES = {'binomial': '2fbead005fc63942decb5326d36a1f32fe2c9d32c904ee61e46866b88447c263',
                        'logseries': '23ead5dcde35d4cfd4ef2c105e4c3d43304b45dc1b1444b7823b9ee4fa144ebb',
@@ -51,6 +51,14 @@ else:
 def int_func(request):
     return (request.param, INT_FUNCS[request.param],
             INT_FUNC_HASHES[request.param])
+
+
+@pytest.fixture
+def restore_singleton_bitgen():
+    """Ensures that the singleton bitgen is restored after a test"""
+    orig_bitgen = np.random.get_bit_generator()
+    yield
+    np.random.set_bit_generator(orig_bitgen)
 
 
 def assert_mt19937_state_equal(a, b):
@@ -175,6 +183,9 @@ class TestMultinomial:
         with pytest.raises(ValueError, match=match):
             random.multinomial(1, pvals)
 
+    def test_multinomial_n_float(self):
+        # Non-index integer types should gracefully truncate floats
+        random.multinomial(100.5, [0.2, 0.8])
 
 class TestSetState:
     def setup_method(self):
@@ -268,7 +279,7 @@ class TestRandint:
     rfunc = random.randint
 
     # valid integer/boolean types
-    itype = [np.bool_, np.int8, np.uint8, np.int16, np.uint16,
+    itype = [np.bool, np.int8, np.uint8, np.int16, np.uint16,
              np.int32, np.uint32, np.int64, np.uint64]
 
     def test_unsupported_type(self):
@@ -276,8 +287,8 @@ class TestRandint:
 
     def test_bounds_checking(self):
         for dt in self.itype:
-            lbnd = 0 if dt is np.bool_ else np.iinfo(dt).min
-            ubnd = 2 if dt is np.bool_ else np.iinfo(dt).max + 1
+            lbnd = 0 if dt is np.bool else np.iinfo(dt).min
+            ubnd = 2 if dt is np.bool else np.iinfo(dt).max + 1
             assert_raises(ValueError, self.rfunc, lbnd - 1, ubnd, dtype=dt)
             assert_raises(ValueError, self.rfunc, lbnd, ubnd + 1, dtype=dt)
             assert_raises(ValueError, self.rfunc, ubnd, lbnd, dtype=dt)
@@ -285,8 +296,8 @@ class TestRandint:
 
     def test_rng_zero_and_extremes(self):
         for dt in self.itype:
-            lbnd = 0 if dt is np.bool_ else np.iinfo(dt).min
-            ubnd = 2 if dt is np.bool_ else np.iinfo(dt).max + 1
+            lbnd = 0 if dt is np.bool else np.iinfo(dt).min
+            ubnd = 2 if dt is np.bool else np.iinfo(dt).max + 1
 
             tgt = ubnd - 1
             assert_equal(self.rfunc(tgt, tgt + 1, size=1000, dtype=dt), tgt)
@@ -301,8 +312,8 @@ class TestRandint:
         # Test for ticket #1690
 
         for dt in self.itype:
-            lbnd = 0 if dt is np.bool_ else np.iinfo(dt).min
-            ubnd = 2 if dt is np.bool_ else np.iinfo(dt).max + 1
+            lbnd = 0 if dt is np.bool else np.iinfo(dt).min
+            ubnd = 2 if dt is np.bool else np.iinfo(dt).max + 1
 
             try:
                 self.rfunc(lbnd, ubnd, dtype=dt)
@@ -321,7 +332,7 @@ class TestRandint:
                 assert_(vals.max() < ubnd)
                 assert_(vals.min() >= 2)
 
-        vals = self.rfunc(0, 2, size=2**16, dtype=np.bool_)
+        vals = self.rfunc(0, 2, size=2**16, dtype=np.bool)
 
         assert_(vals.max() < 2)
         assert_(vals.min() >= 0)
@@ -408,17 +419,20 @@ class TestRandint:
     def test_respect_dtype_singleton(self):
         # See gh-7203
         for dt in self.itype:
-            lbnd = 0 if dt is np.bool_ else np.iinfo(dt).min
-            ubnd = 2 if dt is np.bool_ else np.iinfo(dt).max + 1
+            lbnd = 0 if dt is np.bool else np.iinfo(dt).min
+            ubnd = 2 if dt is np.bool else np.iinfo(dt).max + 1
 
             sample = self.rfunc(lbnd, ubnd, dtype=dt)
             assert_equal(sample.dtype, np.dtype(dt))
 
-        for dt in (bool, int, np.compat.long):
-            lbnd = 0 if dt is bool else np.iinfo(dt).min
-            ubnd = 2 if dt is bool else np.iinfo(dt).max + 1
+        for dt in (bool, int):
+            # The legacy random generation forces the use of "long" on this
+            # branch even when the input is `int` and the default dtype
+            # for int changed (dtype=int is also the functions default)
+            op_dtype = "long" if dt is int else "bool"
+            lbnd = 0 if dt is bool else np.iinfo(op_dtype).min
+            ubnd = 2 if dt is bool else np.iinfo(op_dtype).max + 1
 
-            # gh-7284: Ensure that we get Python data types
             sample = self.rfunc(lbnd, ubnd, dtype=dt)
             assert_(not hasattr(sample, 'dtype'))
             assert_equal(type(sample), dt)
@@ -487,7 +501,7 @@ class TestRandomDist:
         random.seed(self.seed)
         rs = random.RandomState(self.seed)
         actual = rs.tomaxint(size=(3, 2))
-        if np.iinfo(int).max == 2147483647:
+        if np.iinfo(np.long).max == 2147483647:
             desired = np.array([[1328851649,  731237375],
                                 [1270502067,  320041495],
                                 [1908433478,  499156889]], dtype=np.int64)
@@ -1886,6 +1900,7 @@ class TestBroadcast:
         assert_raises(ValueError, logseries, bad_p_two * 3)
 
 
+@pytest.mark.skipif(IS_WASM, reason="can't start thread")
 class TestThread:
     # make sure each state produces the same sequence even in threads
     def setup_method(self):
@@ -2029,3 +2044,81 @@ def test_broadcast_size_error():
         random.binomial([1, 2], 0.3, size=(2, 1))
     with pytest.raises(ValueError):
         random.binomial([1, 2], [0.3, 0.7], size=(2, 1))
+
+
+def test_randomstate_ctor_old_style_pickle():
+    rs = np.random.RandomState(MT19937(0))
+    rs.standard_normal(1)
+    # Directly call reduce which is used in pickling
+    ctor, args, state_a = rs.__reduce__()
+    # Simulate unpickling an old pickle that only has the name
+    assert args[0].__class__.__name__ == "MT19937"
+    b = ctor(*("MT19937",))
+    b.set_state(state_a)
+    state_b = b.get_state(legacy=False)
+
+    assert_equal(state_a['bit_generator'], state_b['bit_generator'])
+    assert_array_equal(state_a['state']['key'], state_b['state']['key'])
+    assert_array_equal(state_a['state']['pos'], state_b['state']['pos'])
+    assert_equal(state_a['has_gauss'], state_b['has_gauss'])
+    assert_equal(state_a['gauss'], state_b['gauss'])
+
+
+def test_hot_swap(restore_singleton_bitgen):
+    # GH 21808
+    def_bg = np.random.default_rng(0)
+    bg = def_bg.bit_generator
+    np.random.set_bit_generator(bg)
+    assert isinstance(np.random.mtrand._rand._bit_generator, type(bg))
+
+    second_bg = np.random.get_bit_generator()
+    assert bg is second_bg
+
+
+def test_seed_alt_bit_gen(restore_singleton_bitgen):
+    # GH 21808
+    bg = PCG64(0)
+    np.random.set_bit_generator(bg)
+    state = np.random.get_state(legacy=False)
+    np.random.seed(1)
+    new_state = np.random.get_state(legacy=False)
+    print(state)
+    print(new_state)
+    assert state["bit_generator"] == "PCG64"
+    assert state["state"]["state"] != new_state["state"]["state"]
+    assert state["state"]["inc"] != new_state["state"]["inc"]
+
+
+def test_state_error_alt_bit_gen(restore_singleton_bitgen):
+    # GH 21808
+    state = np.random.get_state()
+    bg = PCG64(0)
+    np.random.set_bit_generator(bg)
+    with pytest.raises(ValueError, match="state must be for a PCG64"):
+        np.random.set_state(state)
+
+
+def test_swap_worked(restore_singleton_bitgen):
+    # GH 21808
+    np.random.seed(98765)
+    vals = np.random.randint(0, 2 ** 30, 10)
+    bg = PCG64(0)
+    state = bg.state
+    np.random.set_bit_generator(bg)
+    state_direct = np.random.get_state(legacy=False)
+    for field in state:
+        assert state[field] == state_direct[field]
+    np.random.seed(98765)
+    pcg_vals = np.random.randint(0, 2 ** 30, 10)
+    assert not np.all(vals == pcg_vals)
+    new_state = bg.state
+    assert new_state["state"]["state"] != state["state"]["state"]
+    assert new_state["state"]["inc"] == new_state["state"]["inc"]
+
+
+def test_swapped_singleton_against_direct(restore_singleton_bitgen):
+    np.random.set_bit_generator(PCG64(98765))
+    singleton_vals = np.random.randint(0, 2 ** 30, 10)
+    rg = np.random.RandomState(PCG64(98765))
+    non_singleton_vals = rg.randint(0, 2 ** 30, 10)
+    assert_equal(non_singleton_vals, singleton_vals)

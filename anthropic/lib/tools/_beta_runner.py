@@ -117,7 +117,7 @@ class BaseToolRunner(Generic[AnyFunctionToolT, ResponseFormatT]):
             for message in messages
         ]
         self._messages_modified = True
-        self.set_messages_params(lambda params: {**params, "messages": [*self._params["messages"], *message_params]})
+        self.set_messages_params(lambda params: {**params, "messages": [*params["messages"], *message_params]})
         self._cached_tool_call_response = None
 
     def _should_stop(self) -> bool:
@@ -145,6 +145,15 @@ class BaseSyncToolRunner(BaseToolRunner[BetaRunnableTool, ResponseFormatT], Gene
             compaction_control=compaction_control,
         )
         self._client = client
+
+        if compaction_control is not None and compaction_control.get("enabled"):
+            warnings.warn(
+                "The 'compaction_control' parameter is deprecated and will be removed in a future version. "
+                "Use server-side compaction instead by passing `edits=[{'type': 'compact_20260112'}]` in your "
+                "the params passed to `tool_runner()`. See https://platform.claude.com/docs/en/build-with-claude/compaction",
+                DeprecationWarning,
+                stacklevel=3,
+            )
 
         self._iterator = self.__run__()
         self._last_message: (
@@ -255,6 +264,11 @@ class BaseSyncToolRunner(BaseToolRunner[BetaRunnableTool, ResponseFormatT], Gene
                 message = self._get_last_message()
                 assert message is not None
 
+                # Update container from response for programmatic tool calling support
+                last_assistant_message = self._get_last_assistant_message()
+                if last_assistant_message is not None and last_assistant_message.container is not None:
+                    self._params["container"] = last_assistant_message.container.id
+
             self._iteration_count += 1
 
             # If the compaction was performed, skip tool call generation this iteration
@@ -356,12 +370,19 @@ class BaseSyncToolRunner(BaseToolRunner[BetaRunnableTool, ResponseFormatT], Gene
             return self._last_message()
         return self._last_message
 
-    def _get_last_assistant_message_content(self) -> list[ParsedBetaContentBlock[ResponseFormatT]] | None:
+    def _get_last_assistant_message(self) -> ParsedBetaMessage[ResponseFormatT] | None:
         last_message = self._get_last_message()
         if last_message is None or last_message.role != "assistant" or not last_message.content:
             return None
 
-        return last_message.content
+        return last_message
+
+    def _get_last_assistant_message_content(self) -> list[ParsedBetaContentBlock[ResponseFormatT]] | None:
+        last_assistant_message = self._get_last_assistant_message()
+        if last_assistant_message is None:
+            return None
+
+        return last_assistant_message.content
 
 
 class BetaToolRunner(BaseSyncToolRunner[ParsedBetaMessage[ResponseFormatT], ResponseFormatT]):
@@ -403,6 +424,15 @@ class BaseAsyncToolRunner(
             compaction_control=compaction_control,
         )
         self._client = client
+
+        if compaction_control is not None and compaction_control.get("enabled"):
+            warnings.warn(
+                "The 'compaction_control' parameter is deprecated and will be removed in a future version. "
+                "Use server-side compaction instead by passing `edits=[{'type': 'compact_20260112'}]` in your "
+                "the params passed to `tool_runner()`. See https://platform.claude.com/docs/en/build-with-claude/compaction",
+                DeprecationWarning,
+                stacklevel=3,
+            )
 
         self._iterator = self.__run__()
         self._last_message: (
@@ -469,7 +499,7 @@ class BaseAsyncToolRunner(
                 messages.pop()
 
         messages = [
-            *self._params["messages"],
+            *messages,
             BetaMessageParam(
                 role="user",
                 content=self._compaction_control.get("summary_prompt", DEFAULT_SUMMARY_PROMPT),
@@ -514,6 +544,11 @@ class BaseAsyncToolRunner(
                 yield item
                 message = await self._get_last_message()
                 assert message is not None
+
+                # Update container from response for programmatic tool calling support
+                last_assistant_message = await self._get_last_assistant_message()
+                if last_assistant_message is not None and last_assistant_message.container is not None:
+                    self._params["container"] = last_assistant_message.container.id
 
             self._iteration_count += 1
 
@@ -560,12 +595,19 @@ class BaseAsyncToolRunner(
             return await self._last_message()
         return self._last_message
 
-    async def _get_last_assistant_message_content(self) -> list[ParsedBetaContentBlock[ResponseFormatT]] | None:
+    async def _get_last_assistant_message(self) -> ParsedBetaMessage[ResponseFormatT] | None:
         last_message = await self._get_last_message()
         if last_message is None or last_message.role != "assistant" or not last_message.content:
             return None
 
-        return last_message.content
+        return last_message
+
+    async def _get_last_assistant_message_content(self) -> list[ParsedBetaContentBlock[ResponseFormatT]] | None:
+        last_assistant_message = await self._get_last_assistant_message()
+        if last_assistant_message is None:
+            return None
+
+        return last_assistant_message.content
 
     async def _generate_tool_call_response(self) -> BetaMessageParam | None:
         content = await self._get_last_assistant_message_content()

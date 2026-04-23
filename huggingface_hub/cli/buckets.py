@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025-present, the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Annotated, Optional, Union
+from typing import Annotated
 
 import typer
 
@@ -75,7 +74,7 @@ def _parse_bucket_argument(argument: str) -> tuple[str, str]:
         )
 
 
-def _format_size(size: Union[int, float], human_readable: bool = False) -> str:
+def _format_size(size: int | float, human_readable: bool = False) -> str:
     """Format a size in bytes."""
     if not human_readable:
         return str(size)
@@ -89,7 +88,7 @@ def _format_size(size: Union[int, float], human_readable: bool = False) -> str:
     return f"{size:.1f} PB"
 
 
-def _format_mtime(mtime: Optional[datetime], human_readable: bool = False) -> str:
+def _format_mtime(mtime: datetime | None, human_readable: bool = False) -> str:
     """Format mtime datetime to a readable date string."""
     if mtime is None:
         return ""
@@ -99,7 +98,7 @@ def _format_mtime(mtime: Optional[datetime], human_readable: bool = False) -> st
 
 
 def _build_tree(
-    items: list[Union[BucketFile, BucketFolder]],
+    items: list[BucketFile | BucketFolder],
     human_readable: bool = False,
     quiet: bool = False,
 ) -> list[str]:
@@ -290,7 +289,7 @@ def _is_bucket_id(argument: str) -> bool:
 )
 def list_cmd(
     argument: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(
             help=(
                 "Namespace (user or org) to list buckets, or bucket ID"
@@ -335,7 +334,7 @@ def list_cmd(
 
     if is_file_mode:
         _list_files(
-            argument=argument,  # type: ignore[arg-type]
+            argument=argument,  # type: ignore
             human_readable=human_readable,
             as_tree=as_tree,
             recursive=recursive,
@@ -356,13 +355,13 @@ def list_cmd(
 
 
 def _list_buckets(
-    namespace: Optional[str],
+    namespace: str | None,
     human_readable: bool,
     as_tree: bool,
     recursive: bool,
     format: OutputFormat,
     quiet: bool,
-    token: Optional[str],
+    token: str | None,
 ) -> None:
     """List buckets in a namespace."""
     # Validate incompatible flags
@@ -410,7 +409,7 @@ def _list_files(
     recursive: bool,
     format: OutputFormat,
     quiet: bool,
-    token: Optional[str],
+    token: str | None,
 ) -> None:
     """List files in a bucket."""
     # Validate incompatible flags
@@ -613,13 +612,13 @@ def remove(
         ),
     ] = False,
     include: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             help="Include only files matching pattern (can specify multiple). Requires --recursive.",
         ),
     ] = None,
     exclude: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             help="Exclude files matching pattern (can specify multiple). Requires --recursive.",
         ),
@@ -792,13 +791,13 @@ def move(
 )
 def sync(
     source: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(
             help="Source path: local directory or hf://buckets/namespace/bucket_name(/prefix)",
         ),
     ] = None,
     dest: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(
             help="Destination path: local directory or hf://buckets/namespace/bucket_name(/prefix)",
         ),
@@ -824,13 +823,13 @@ def sync(
         ),
     ] = False,
     plan: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Save sync plan to JSONL file for review instead of executing.",
         ),
     ] = None,
     apply: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Apply a previously saved plan file.",
         ),
@@ -843,19 +842,19 @@ def sync(
         ),
     ] = False,
     include: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             help="Include files matching pattern (can specify multiple).",
         ),
     ] = None,
     exclude: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             help="Exclude files matching pattern (can specify multiple).",
         ),
     ] = None,
     filter_from: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Read include/exclude patterns from file.",
         ),
@@ -934,7 +933,7 @@ def sync(
 def cp(
     src: Annotated[str, typer.Argument(help="Source: local file, hf://buckets/... path, or - for stdin")],
     dst: Annotated[
-        Optional[str], typer.Argument(help="Destination: local path, hf://buckets/... path, or - for stdout")
+        str | None, typer.Argument(help="Destination: local path, hf://buckets/... path, or - for stdout")
     ] = None,
     quiet: QuietOpt = False,
     token: TokenOpt = None,
@@ -960,8 +959,7 @@ def cp(
         raise typer.BadParameter("Stdin upload requires a bucket destination.")
 
     if src_is_stdin and dst_is_bucket:
-        assert dst is not None
-        _, prefix = _parse_bucket_path(dst)
+        _, prefix = _parse_bucket_path(dst)  # type: ignore
         if prefix == "" or prefix.endswith("/"):
             raise typer.BadParameter("Stdin upload requires a full destination path including filename.")
 
@@ -1022,7 +1020,7 @@ def cp(
 
     elif src_is_stdin:
         # Upload from stdin
-        bucket_id, remote_path = _parse_bucket_path(dst)  # type: ignore[arg-type]
+        bucket_id, remote_path = _parse_bucket_path(dst)  # type: ignore
         data = sys.stdin.buffer.read()
 
         if quiet:
@@ -1041,7 +1039,7 @@ def cp(
         if not os.path.isfile(src):
             raise typer.BadParameter(f"Source file not found: {src}")
 
-        bucket_id, prefix = _parse_bucket_path(dst)  # type: ignore[arg-type]
+        bucket_id, prefix = _parse_bucket_path(dst)  # type: ignore
 
         if prefix == "":
             remote_path = os.path.basename(src)

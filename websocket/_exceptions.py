@@ -1,49 +1,44 @@
 """
+_exceptions.py
 websocket - WebSocket client library for Python
 
-Copyright (C) 2010 Hiroki Ohtani(liris)
+Copyright 2025 engn33r
 
-    This library is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 2.1 of the License, or (at your option) any later version.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-    This library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    You should have received a copy of the GNU Lesser General Public
-    License along with this library; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor,
-    Boston, MA  02110-1335  USA
-
-"""
-
-
-"""
-define websocket exceptions
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 """
 
 
 class WebSocketException(Exception):
     """
-    websocket exception class.
+    WebSocket exception class.
     """
+
     pass
 
 
 class WebSocketProtocolException(WebSocketException):
     """
-    If the websocket protocol is invalid, this exception will be raised.
+    If the WebSocket protocol is invalid, this exception will be raised.
     """
+
     pass
 
 
 class WebSocketPayloadException(WebSocketException):
     """
-    If the websocket payload is invalid, this exception will be raised.
+    If the WebSocket payload is invalid, this exception will be raised.
     """
+
     pass
 
 
@@ -52,6 +47,7 @@ class WebSocketConnectionClosedException(WebSocketException):
     If remote host closed the connection or some network error happened,
     this exception will be raised.
     """
+
     pass
 
 
@@ -59,6 +55,7 @@ class WebSocketTimeoutException(WebSocketException):
     """
     WebSocketTimeoutException will be raised at socket timeout during read/write data.
     """
+
     pass
 
 
@@ -66,6 +63,7 @@ class WebSocketProxyException(WebSocketException):
     """
     WebSocketProxyException will be raised when proxy error occurred.
     """
+
     pass
 
 
@@ -74,15 +72,23 @@ class WebSocketBadStatusException(WebSocketException):
     WebSocketBadStatusException will be raised when we get bad handshake status code.
     """
 
-    def __init__(self, message, status_code, status_message=None, resp_headers=None):
-        msg = message % (status_code, status_message)
-        super(WebSocketBadStatusException, self).__init__(msg)
+    def __init__(
+        self,
+        message: str,
+        status_code: int,
+        status_message=None,
+        resp_headers=None,
+        resp_body=None,
+    ):
+        super().__init__(message)
         self.status_code = status_code
         self.resp_headers = resp_headers
+        self.resp_body = resp_body
 
 
 class WebSocketAddressException(WebSocketException):
     """
     If the websocket address info cannot be found, this exception will be raised.
     """
+
     pass

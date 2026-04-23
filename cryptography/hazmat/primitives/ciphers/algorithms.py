@@ -5,22 +5,29 @@
 from __future__ import annotations
 
 from cryptography import utils
+from cryptography.hazmat.decrepit.ciphers.algorithms import (
+    ARC4 as ARC4,
+)
+from cryptography.hazmat.decrepit.ciphers.algorithms import (
+    CAST5 as CAST5,
+)
+from cryptography.hazmat.decrepit.ciphers.algorithms import (
+    IDEA as IDEA,
+)
+from cryptography.hazmat.decrepit.ciphers.algorithms import (
+    SEED as SEED,
+)
+from cryptography.hazmat.decrepit.ciphers.algorithms import (
+    Blowfish as Blowfish,
+)
+from cryptography.hazmat.decrepit.ciphers.algorithms import (
+    TripleDES as TripleDES,
+)
+from cryptography.hazmat.primitives._cipheralgorithm import _verify_key_size
 from cryptography.hazmat.primitives.ciphers import (
     BlockCipherAlgorithm,
     CipherAlgorithm,
 )
-
-
-def _verify_key_size(algorithm: CipherAlgorithm, key: bytes) -> bytes:
-    # Verify that the key is instance of bytes
-    utils._check_byteslike("key", key)
-
-    # Verify that the key size matches the expected key size
-    if len(key) * 8 not in algorithm.key_sizes:
-        raise ValueError(
-            f"Invalid key size ({len(key) * 8}) for {algorithm.name}."
-        )
-    return key
 
 
 class AES(BlockCipherAlgorithm):
@@ -29,7 +36,7 @@ class AES(BlockCipherAlgorithm):
     # 512 added to support AES-256-XTS, which uses 512-bit keys
     key_sizes = frozenset([128, 192, 256, 512])
 
-    def __init__(self, key: bytes):
+    def __init__(self, key: utils.Buffer):
         self.key = _verify_key_size(self, key)
 
     @property
@@ -43,7 +50,7 @@ class AES128(BlockCipherAlgorithm):
     key_sizes = frozenset([128])
     key_size = 128
 
-    def __init__(self, key: bytes):
+    def __init__(self, key: utils.Buffer):
         self.key = _verify_key_size(self, key)
 
 
@@ -53,7 +60,7 @@ class AES256(BlockCipherAlgorithm):
     key_sizes = frozenset([256])
     key_size = 256
 
-    def __init__(self, key: bytes):
+    def __init__(self, key: utils.Buffer):
         self.key = _verify_key_size(self, key)
 
 
@@ -62,7 +69,7 @@ class Camellia(BlockCipherAlgorithm):
     block_size = 128
     key_sizes = frozenset([128, 192, 256])
 
-    def __init__(self, key: bytes):
+    def __init__(self, key: utils.Buffer):
         self.key = _verify_key_size(self, key)
 
     @property
@@ -70,124 +77,27 @@ class Camellia(BlockCipherAlgorithm):
         return len(self.key) * 8
 
 
-class TripleDES(BlockCipherAlgorithm):
-    name = "3DES"
-    block_size = 64
-    key_sizes = frozenset([64, 128, 192])
-
-    def __init__(self, key: bytes):
-        if len(key) == 8:
-            key += key + key
-        elif len(key) == 16:
-            key += key[:8]
-        self.key = _verify_key_size(self, key)
-
-    @property
-    def key_size(self) -> int:
-        return len(self.key) * 8
-
-
-class Blowfish(BlockCipherAlgorithm):
-    name = "Blowfish"
-    block_size = 64
-    key_sizes = frozenset(range(32, 449, 8))
-
-    def __init__(self, key: bytes):
-        self.key = _verify_key_size(self, key)
-
-    @property
-    def key_size(self) -> int:
-        return len(self.key) * 8
-
-
-_BlowfishInternal = Blowfish
 utils.deprecated(
-    Blowfish,
+    ARC4,
     __name__,
-    "Blowfish has been deprecated and will be removed in a future release",
-    utils.DeprecatedIn37,
-    name="Blowfish",
+    "ARC4 has been moved to "
+    "cryptography.hazmat.decrepit.ciphers.algorithms.ARC4 and "
+    "will be removed from "
+    "cryptography.hazmat.primitives.ciphers.algorithms in 48.0.0.",
+    utils.DeprecatedIn43,
+    name="ARC4",
 )
 
 
-class CAST5(BlockCipherAlgorithm):
-    name = "CAST5"
-    block_size = 64
-    key_sizes = frozenset(range(40, 129, 8))
-
-    def __init__(self, key: bytes):
-        self.key = _verify_key_size(self, key)
-
-    @property
-    def key_size(self) -> int:
-        return len(self.key) * 8
-
-
-_CAST5Internal = CAST5
 utils.deprecated(
-    CAST5,
+    TripleDES,
     __name__,
-    "CAST5 has been deprecated and will be removed in a future release",
-    utils.DeprecatedIn37,
-    name="CAST5",
-)
-
-
-class ARC4(CipherAlgorithm):
-    name = "RC4"
-    key_sizes = frozenset([40, 56, 64, 80, 128, 160, 192, 256])
-
-    def __init__(self, key: bytes):
-        self.key = _verify_key_size(self, key)
-
-    @property
-    def key_size(self) -> int:
-        return len(self.key) * 8
-
-
-class IDEA(BlockCipherAlgorithm):
-    name = "IDEA"
-    block_size = 64
-    key_sizes = frozenset([128])
-
-    def __init__(self, key: bytes):
-        self.key = _verify_key_size(self, key)
-
-    @property
-    def key_size(self) -> int:
-        return len(self.key) * 8
-
-
-_IDEAInternal = IDEA
-utils.deprecated(
-    IDEA,
-    __name__,
-    "IDEA has been deprecated and will be removed in a future release",
-    utils.DeprecatedIn37,
-    name="IDEA",
-)
-
-
-class SEED(BlockCipherAlgorithm):
-    name = "SEED"
-    block_size = 128
-    key_sizes = frozenset([128])
-
-    def __init__(self, key: bytes):
-        self.key = _verify_key_size(self, key)
-
-    @property
-    def key_size(self) -> int:
-        return len(self.key) * 8
-
-
-_SEEDInternal = SEED
-utils.deprecated(
-    SEED,
-    __name__,
-    "SEED has been deprecated and will be removed in a future release",
-    utils.DeprecatedIn37,
-    name="SEED",
+    "TripleDES has been moved to "
+    "cryptography.hazmat.decrepit.ciphers.algorithms.TripleDES and "
+    "will be removed from "
+    "cryptography.hazmat.primitives.ciphers.algorithms in 48.0.0.",
+    utils.DeprecatedIn43,
+    name="TripleDES",
 )
 
 
@@ -195,7 +105,7 @@ class ChaCha20(CipherAlgorithm):
     name = "ChaCha20"
     key_sizes = frozenset([256])
 
-    def __init__(self, key: bytes, nonce: bytes):
+    def __init__(self, key: utils.Buffer, nonce: utils.Buffer):
         self.key = _verify_key_size(self, key)
         utils._check_byteslike("nonce", nonce)
 
@@ -205,7 +115,7 @@ class ChaCha20(CipherAlgorithm):
         self._nonce = nonce
 
     @property
-    def nonce(self) -> bytes:
+    def nonce(self) -> utils.Buffer:
         return self._nonce
 
     @property

@@ -9,6 +9,7 @@ import abc
 from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
 from cryptography.hazmat.bindings._rust import openssl as rust_openssl
 from cryptography.hazmat.primitives import _serialization
+from cryptography.utils import Buffer
 
 
 class X448PublicKey(metaclass=abc.ABCMeta):
@@ -47,6 +48,12 @@ class X448PublicKey(metaclass=abc.ABCMeta):
         Checks equality.
         """
 
+    @abc.abstractmethod
+    def __copy__(self) -> X448PublicKey:
+        """
+        Returns a copy.
+        """
+
 
 if hasattr(rust_openssl, "x448"):
     X448PublicKey.register(rust_openssl.x448.X448PublicKey)
@@ -66,7 +73,7 @@ class X448PrivateKey(metaclass=abc.ABCMeta):
         return rust_openssl.x448.generate_key()
 
     @classmethod
-    def from_private_bytes(cls, data: bytes) -> X448PrivateKey:
+    def from_private_bytes(cls, data: Buffer) -> X448PrivateKey:
         from cryptography.hazmat.backends.openssl.backend import backend
 
         if not backend.x448_supported():
@@ -105,6 +112,12 @@ class X448PrivateKey(metaclass=abc.ABCMeta):
     def exchange(self, peer_public_key: X448PublicKey) -> bytes:
         """
         Performs a key exchange operation using the provided peer's public key.
+        """
+
+    @abc.abstractmethod
+    def __copy__(self) -> X448PrivateKey:
+        """
+        Returns a copy.
         """
 
 

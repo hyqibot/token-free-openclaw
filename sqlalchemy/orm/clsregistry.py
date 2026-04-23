@@ -1,5 +1,5 @@
 # orm/clsregistry.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -72,7 +72,7 @@ def add_class(
         # class already exists.
         existing = decl_class_registry[classname]
         if not isinstance(existing, _MultipleClassMarker):
-            existing = decl_class_registry[classname] = _MultipleClassMarker(
+            decl_class_registry[classname] = _MultipleClassMarker(
                 [cls, cast("Type[Any]", existing)]
             )
     else:
@@ -287,8 +287,9 @@ class _ModuleMarker(ClsRegistryToken):
 
     def _remove_item(self, name: str) -> None:
         self.contents.pop(name, None)
-        if not self.contents and self.parent is not None:
-            self.parent._remove_item(self.name)
+        if not self.contents:
+            if self.parent is not None:
+                self.parent._remove_item(self.name)
             _registries.discard(self)
 
     def resolve_attr(self, key: str) -> Union[_ModNS, Type[Any]]:
@@ -316,7 +317,7 @@ class _ModuleMarker(ClsRegistryToken):
                 else:
                     raise
         else:
-            existing = self.contents[name] = _MultipleClassMarker(
+            self.contents[name] = _MultipleClassMarker(
                 [cls], on_remove=lambda: self._remove_item(name)
             )
 

@@ -33,6 +33,7 @@ static PyObject *f2py_rout_wrap_call(PyObject *capi_self,
                                      PyObject *capi_args) {
   PyObject * volatile capi_buildvalue = NULL;
   int type_num = 0;
+  int elsize = 0;
   npy_intp *dims = NULL;
   PyObject *dims_capi = Py_None;
   int rank = 0;
@@ -41,8 +42,8 @@ static PyObject *f2py_rout_wrap_call(PyObject *capi_self,
   PyObject *arr_capi = Py_None;
   int i;
 
-  if (!PyArg_ParseTuple(capi_args,"iOiO|:wrap.call",\
-                        &type_num,&dims_capi,&intent,&arr_capi))
+  if (!PyArg_ParseTuple(capi_args,"iiOiO|:wrap.call",\
+                        &type_num,&elsize,&dims_capi,&intent,&arr_capi))
     return NULL;
   rank = PySequence_Length(dims_capi);
   dims = malloc(rank*sizeof(npy_intp));
@@ -58,7 +59,7 @@ static PyObject *f2py_rout_wrap_call(PyObject *capi_self,
         goto fail;
     }
   }
-  capi_arr_tmp = array_from_pyobj(type_num,dims,rank,intent|F2PY_INTENT_OUT,arr_capi);
+  capi_arr_tmp = ndarray_from_pyobj(type_num,elsize,dims,rank,intent|F2PY_INTENT_OUT,arr_capi,"wrap.call failed");
   if (capi_arr_tmp == NULL) {
     free(dims);
     return NULL;
@@ -114,7 +115,7 @@ static PyObject *f2py_rout_wrap_attrs(PyObject *capi_self,
                        PyArray_DESCR(arr)->type,
                        PyArray_TYPE(arr),
                        PyArray_ITEMSIZE(arr),
-                       PyArray_DESCR(arr)->alignment,
+                       PyDataType_ALIGNMENT(PyArray_DESCR(arr)),
                        PyArray_FLAGS(arr),
                        PyArray_ITEMSIZE(arr));
 }
@@ -190,7 +191,7 @@ PyMODINIT_FUNC PyInit_test_array_from_pyobj_ext(void) {
   ADDCONST("NPY_STRING", NPY_STRING);
   ADDCONST("NPY_UNICODE", NPY_UNICODE);
   ADDCONST("NPY_VOID", NPY_VOID);
-  ADDCONST("NPY_NTYPES", NPY_NTYPES);
+  ADDCONST("NPY_NTYPES_LEGACY", NPY_NTYPES_LEGACY);
   ADDCONST("NPY_NOTYPE", NPY_NOTYPE);
   ADDCONST("NPY_USERDEF", NPY_USERDEF);
 
@@ -213,13 +214,18 @@ PyMODINIT_FUNC PyInit_test_array_from_pyobj_ext(void) {
   ADDCONST("DEFAULT", NPY_ARRAY_DEFAULT);
   ADDCONST("UPDATE_ALL", NPY_ARRAY_UPDATE_ALL);
 
-#undef ADDCONST(
+#undef ADDCONST
 
   if (PyErr_Occurred())
     Py_FatalError("can't initialize module wrap");
 
 #ifdef F2PY_REPORT_ATEXIT
   on_exit(f2py_report_on_exit,(void*)"array_from_pyobj.wrap.call");
+#endif
+
+#if Py_GIL_DISABLED
+    // signal whether this module supports running with the GIL disabled
+    PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
 #endif
 
   return m;

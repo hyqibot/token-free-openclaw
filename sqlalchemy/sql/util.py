@@ -1,14 +1,12 @@
 # sql/util.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
 # the MIT License: https://www.opensource.org/licenses/mit-license.php
 # mypy: allow-untyped-defs, allow-untyped-calls
 
-"""High level utilities which build upon other modules here.
-
-"""
+"""High level utilities which build upon other modules here."""
 from __future__ import annotations
 
 from collections import deque
@@ -106,7 +104,7 @@ def join_condition(
 
     would produce an expression along the lines of::
 
-        tablea.c.id==tableb.c.tablea_id
+        tablea.c.id == tableb.c.tablea_id
 
     The join is determined based on the foreign key relationships
     between the two selectables.   If there are multiple ways
@@ -268,7 +266,7 @@ def visit_binary_product(
 
     The function is of the form::
 
-        def my_fn(binary, left, right)
+        def my_fn(binary, left, right): ...
 
     For each binary expression located which has a
     comparison operator, the product of "left" and
@@ -277,12 +275,11 @@ def visit_binary_product(
 
     Hence an expression like::
 
-        and_(
-            (a + b) == q + func.sum(e + f),
-            j == r
-        )
+        and_((a + b) == q + func.sum(e + f), j == r)
 
-    would have the traversal::
+    would have the traversal:
+
+    .. sourcecode:: text
 
         a <eq> q
         a <eq> e
@@ -481,7 +478,7 @@ def surface_selectables(clause):
             stack.append(elem.element)
 
 
-def surface_selectables_only(clause):
+def surface_selectables_only(clause: ClauseElement) -> Iterator[ClauseElement]:
     stack = [clause]
     while stack:
         elem = stack.pop()
@@ -528,9 +525,7 @@ def bind_values(clause):
 
     E.g.::
 
-        >>> expr = and_(
-        ...    table.c.foo==5, table.c.foo==7
-        ... )
+        >>> expr = and_(table.c.foo == 5, table.c.foo == 7)
         >>> bind_values(expr)
         [5, 7]
     """
@@ -1041,20 +1036,24 @@ class ClauseAdapter(visitors.ReplacingExternalTraversal):
 
     E.g.::
 
-      table1 = Table('sometable', metadata,
-          Column('col1', Integer),
-          Column('col2', Integer)
-          )
-      table2 = Table('someothertable', metadata,
-          Column('col1', Integer),
-          Column('col2', Integer)
-          )
+      table1 = Table(
+          "sometable",
+          metadata,
+          Column("col1", Integer),
+          Column("col2", Integer),
+      )
+      table2 = Table(
+          "someothertable",
+          metadata,
+          Column("col1", Integer),
+          Column("col2", Integer),
+      )
 
       condition = table1.c.col1 == table2.c.col1
 
     make an alias of table1::
 
-      s = table1.alias('foo')
+      s = table1.alias("foo")
 
     calling ``ClauseAdapter(s).traverse(condition)`` converts
     condition to read::
@@ -1172,7 +1171,7 @@ class ClauseAdapter(visitors.ReplacingExternalTraversal):
                 # we are an alias of a table and we are not derived from an
                 # alias of a table (which nonetheless may be the same table
                 # as ours) so, same thing
-                return col  # type: ignore
+                return col
             else:
                 # other cases where we are a selectable and the element
                 # is another join or selectable that contains a table which our

@@ -21,7 +21,10 @@ from ..constant import LOG_LEVEL_ENV
 from ..utils.packaged_runtime import running_as_packaged_executable
 from ..utils.trace_m_flag import log_desktop_subprocess_argv
 
-_DESKTOP_WEBVIEW_TITLE = "iClaw console"
+_DESKTOP_WEBVIEW_TITLE = (
+    "iClaw Console——爱你所爱，如影随形。永久免token费，支持微信钉钉，兼容所有openclaw技能，"
+    "skill能力加强。官方视频抖音号：98806056998"
+)
 
 
 def _desktop_server_argv(host: str, port: int, log_level: str) -> list[str]:

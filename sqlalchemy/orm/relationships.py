@@ -1,5 +1,5 @@
 # orm/relationships.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -486,8 +486,7 @@ class RelationshipProperty(
         else:
             self._overlaps = ()
 
-        # mypy ignoring the @property setter
-        self.cascade = cascade  # type: ignore
+        self.cascade = cascade
 
         self.back_populates = back_populates
 
@@ -709,12 +708,16 @@ class RelationshipProperty(
         def __eq__(self, other: Any) -> ColumnElement[bool]:  # type: ignore[override]  # noqa: E501
             """Implement the ``==`` operator.
 
-            In a many-to-one context, such as::
+            In a many-to-one context, such as:
+
+            .. sourcecode:: text
 
               MyClass.some_prop == <some object>
 
             this will typically produce a
-            clause such as::
+            clause such as:
+
+            .. sourcecode:: text
 
               mytable.related_id == <some id>
 
@@ -725,7 +728,7 @@ class RelationshipProperty(
             many-to-one comparisons:
 
             * Comparisons against collections are not supported.
-              Use :meth:`~.Relationship.Comparator.contains`.
+              Use :meth:`~.RelationshipProperty.Comparator.contains`.
             * Compared to a scalar one-to-many, will produce a
               clause that compares the target columns in the parent to
               the given target.
@@ -736,7 +739,7 @@ class RelationshipProperty(
               queries that go beyond simple AND conjunctions of
               comparisons, such as those which use OR. Use
               explicit joins, outerjoins, or
-              :meth:`~.Relationship.Comparator.has` for
+              :meth:`~.RelationshipProperty.Comparator.has` for
               more comprehensive non-many-to-one scalar
               membership tests.
             * Comparisons against ``None`` given in a one-to-many
@@ -877,38 +880,39 @@ class RelationshipProperty(
             An expression like::
 
                 session.query(MyClass).filter(
-                    MyClass.somereference.any(SomeRelated.x==2)
+                    MyClass.somereference.any(SomeRelated.x == 2)
                 )
 
+            Will produce a query like:
 
-            Will produce a query like::
+            .. sourcecode:: sql
 
                 SELECT * FROM my_table WHERE
                 EXISTS (SELECT 1 FROM related WHERE related.my_id=my_table.id
                 AND related.x=2)
 
-            Because :meth:`~.Relationship.Comparator.any` uses
+            Because :meth:`~.RelationshipProperty.Comparator.any` uses
             a correlated subquery, its performance is not nearly as
             good when compared against large target tables as that of
             using a join.
 
-            :meth:`~.Relationship.Comparator.any` is particularly
+            :meth:`~.RelationshipProperty.Comparator.any` is particularly
             useful for testing for empty collections::
 
-                session.query(MyClass).filter(
-                    ~MyClass.somereference.any()
-                )
+                session.query(MyClass).filter(~MyClass.somereference.any())
 
-            will produce::
+            will produce:
+
+            .. sourcecode:: sql
 
                 SELECT * FROM my_table WHERE
                 NOT (EXISTS (SELECT 1 FROM related WHERE
                 related.my_id=my_table.id))
 
-            :meth:`~.Relationship.Comparator.any` is only
+            :meth:`~.RelationshipProperty.Comparator.any` is only
             valid for collections, i.e. a :func:`_orm.relationship`
             that has ``uselist=True``.  For scalar references,
-            use :meth:`~.Relationship.Comparator.has`.
+            use :meth:`~.RelationshipProperty.Comparator.has`.
 
             """
             if not self.property.uselist:
@@ -930,25 +934,26 @@ class RelationshipProperty(
             An expression like::
 
                 session.query(MyClass).filter(
-                    MyClass.somereference.has(SomeRelated.x==2)
+                    MyClass.somereference.has(SomeRelated.x == 2)
                 )
 
+            Will produce a query like:
 
-            Will produce a query like::
+            .. sourcecode:: sql
 
                 SELECT * FROM my_table WHERE
                 EXISTS (SELECT 1 FROM related WHERE
                 related.id==my_table.related_id AND related.x=2)
 
-            Because :meth:`~.Relationship.Comparator.has` uses
+            Because :meth:`~.RelationshipProperty.Comparator.has` uses
             a correlated subquery, its performance is not nearly as
             good when compared against large target tables as that of
             using a join.
 
-            :meth:`~.Relationship.Comparator.has` is only
+            :meth:`~.RelationshipProperty.Comparator.has` is only
             valid for scalar references, i.e. a :func:`_orm.relationship`
             that has ``uselist=False``.  For collection references,
-            use :meth:`~.Relationship.Comparator.any`.
+            use :meth:`~.RelationshipProperty.Comparator.any`.
 
             """
             if self.property.uselist:
@@ -963,7 +968,7 @@ class RelationshipProperty(
             """Return a simple expression that tests a collection for
             containment of a particular item.
 
-            :meth:`~.Relationship.Comparator.contains` is
+            :meth:`~.RelationshipProperty.Comparator.contains` is
             only valid for a collection, i.e. a
             :func:`_orm.relationship` that implements
             one-to-many or many-to-many with ``uselist=True``.
@@ -973,19 +978,21 @@ class RelationshipProperty(
 
                 MyClass.contains(other)
 
-            Produces a clause like::
+            Produces a clause like:
+
+            .. sourcecode:: sql
 
                 mytable.id == <some id>
 
             Where ``<some id>`` is the value of the foreign key
             attribute on ``other`` which refers to the primary
             key of its parent object. From this it follows that
-            :meth:`~.Relationship.Comparator.contains` is
+            :meth:`~.RelationshipProperty.Comparator.contains` is
             very useful when used with simple one-to-many
             operations.
 
             For many-to-many operations, the behavior of
-            :meth:`~.Relationship.Comparator.contains`
+            :meth:`~.RelationshipProperty.Comparator.contains`
             has more caveats. The association table will be
             rendered in the statement, producing an "implicit"
             join, that is, includes multiple tables in the FROM
@@ -993,7 +1000,9 @@ class RelationshipProperty(
 
                 query(MyClass).filter(MyClass.contains(other))
 
-            Produces a query like::
+            Produces a query like:
+
+            .. sourcecode:: sql
 
                 SELECT * FROM my_table, my_association_table AS
                 my_association_table_1 WHERE
@@ -1002,14 +1011,14 @@ class RelationshipProperty(
 
             Where ``<some id>`` would be the primary key of
             ``other``. From the above, it is clear that
-            :meth:`~.Relationship.Comparator.contains`
+            :meth:`~.RelationshipProperty.Comparator.contains`
             will **not** work with many-to-many collections when
             used in queries that move beyond simple AND
             conjunctions, such as multiple
-            :meth:`~.Relationship.Comparator.contains`
+            :meth:`~.RelationshipProperty.Comparator.contains`
             expressions joined by OR. In such cases subqueries or
             explicit "outer joins" will need to be used instead.
-            See :meth:`~.Relationship.Comparator.any` for
+            See :meth:`~.RelationshipProperty.Comparator.any` for
             a less-performant alternative using EXISTS, or refer
             to :meth:`_query.Query.outerjoin`
             as well as :ref:`orm_queryguide_joins`
@@ -1089,11 +1098,15 @@ class RelationshipProperty(
         def __ne__(self, other: Any) -> ColumnElement[bool]:  # type: ignore[override]  # noqa: E501
             """Implement the ``!=`` operator.
 
-            In a many-to-one context, such as::
+            In a many-to-one context, such as:
+
+            .. sourcecode:: text
 
               MyClass.some_prop != <some object>
 
-            This will typically produce a clause such as::
+            This will typically produce a clause such as:
+
+            .. sourcecode:: sql
 
               mytable.related_id != <some id>
 
@@ -1105,7 +1118,7 @@ class RelationshipProperty(
 
             * Comparisons against collections are not supported.
               Use
-              :meth:`~.Relationship.Comparator.contains`
+              :meth:`~.RelationshipProperty.Comparator.contains`
               in conjunction with :func:`_expression.not_`.
             * Compared to a scalar one-to-many, will produce a
               clause that compares the target columns in the parent to
@@ -1117,7 +1130,7 @@ class RelationshipProperty(
               queries that go beyond simple AND conjunctions of
               comparisons, such as those which use OR. Use
               explicit joins, outerjoins, or
-              :meth:`~.Relationship.Comparator.has` in
+              :meth:`~.RelationshipProperty.Comparator.has` in
               conjunction with :func:`_expression.not_` for
               more comprehensive non-many-to-one scalar
               membership tests.
@@ -1744,8 +1757,6 @@ class RelationshipProperty(
         extracted_mapped_annotation: Optional[_AnnotationScanType],
         is_dataclass_field: bool,
     ) -> None:
-        argument = extracted_mapped_annotation
-
         if extracted_mapped_annotation is None:
             if self.argument is None:
                 self._raise_for_required(key, cls)
@@ -2898,9 +2909,6 @@ class JoinCondition:
     ) -> None:
         """Check the foreign key columns collected and emit error
         messages."""
-
-        can_sync = False
-
         foreign_cols = self._gather_columns_with_annotation(
             join_condition, "foreign"
         )

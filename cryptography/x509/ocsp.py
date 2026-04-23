@@ -4,21 +4,16 @@
 
 from __future__ import annotations
 
-import abc
 import datetime
-import typing
+from collections.abc import Iterable
 
 from cryptography import utils, x509
 from cryptography.hazmat.bindings._rust import ocsp
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.types import (
     CertificateIssuerPrivateKeyTypes,
 )
-from cryptography.x509.base import (
-    _EARLIEST_UTC_TIME,
-    _convert_to_naive_utc_time,
-    _reject_duplicate_extension,
-)
+from cryptography.x509.base import _reject_duplicate_extension
 
 
 class OCSPResponderEncoding(utils.Enum):
@@ -60,8 +55,8 @@ class OCSPCertStatus(utils.Enum):
 class _SingleResponse:
     def __init__(
         self,
-        cert: x509.Certificate,
-        issuer: x509.Certificate,
+        resp: tuple[x509.Certificate, x509.Certificate] | None,
+        resp_hash: tuple[bytes, bytes, int] | None,
         algorithm: hashes.HashAlgorithm,
         cert_status: OCSPCertStatus,
         this_update: datetime.datetime,
@@ -69,11 +64,6 @@ class _SingleResponse:
         revocation_time: datetime.datetime | None,
         revocation_reason: x509.ReasonFlags | None,
     ):
-        if not isinstance(cert, x509.Certificate) or not isinstance(
-            issuer, x509.Certificate
-        ):
-            raise TypeError("cert and issuer must be a Certificate")
-
         _verify_algorithm(algorithm)
         if not isinstance(this_update, datetime.datetime):
             raise TypeError("this_update must be a datetime object")
@@ -82,8 +72,8 @@ class _SingleResponse:
         ):
             raise TypeError("next_update must be a datetime object or None")
 
-        self._cert = cert
-        self._issuer = issuer
+        self._resp = resp
+        self._resp_hash = resp_hash
         self._algorithm = algorithm
         self._this_update = this_update
         self._next_update = next_update
@@ -107,13 +97,6 @@ class _SingleResponse:
             if not isinstance(revocation_time, datetime.datetime):
                 raise TypeError("revocation_time must be a datetime object")
 
-            revocation_time = _convert_to_naive_utc_time(revocation_time)
-            if revocation_time < _EARLIEST_UTC_TIME:
-                raise ValueError(
-                    "The revocation_time must be on or after"
-                    " 1950 January 1."
-                )
-
             if revocation_reason is not None and not isinstance(
                 revocation_reason, x509.ReasonFlags
             ):
@@ -127,279 +110,9 @@ class _SingleResponse:
         self._revocation_reason = revocation_reason
 
 
-class OCSPRequest(metaclass=abc.ABCMeta):
-    @property
-    @abc.abstractmethod
-    def issuer_key_hash(self) -> bytes:
-        """
-        The hash of the issuer public key
-        """
-
-    @property
-    @abc.abstractmethod
-    def issuer_name_hash(self) -> bytes:
-        """
-        The hash of the issuer name
-        """
-
-    @property
-    @abc.abstractmethod
-    def hash_algorithm(self) -> hashes.HashAlgorithm:
-        """
-        The hash algorithm used in the issuer name and key hashes
-        """
-
-    @property
-    @abc.abstractmethod
-    def serial_number(self) -> int:
-        """
-        The serial number of the cert whose status is being checked
-        """
-
-    @abc.abstractmethod
-    def public_bytes(self, encoding: serialization.Encoding) -> bytes:
-        """
-        Serializes the request to DER
-        """
-
-    @property
-    @abc.abstractmethod
-    def extensions(self) -> x509.Extensions:
-        """
-        The list of request extensions. Not single request extensions.
-        """
-
-
-class OCSPSingleResponse(metaclass=abc.ABCMeta):
-    @property
-    @abc.abstractmethod
-    def certificate_status(self) -> OCSPCertStatus:
-        """
-        The status of the certificate (an element from the OCSPCertStatus enum)
-        """
-
-    @property
-    @abc.abstractmethod
-    def revocation_time(self) -> datetime.datetime | None:
-        """
-        The date of when the certificate was revoked or None if not
-        revoked.
-        """
-
-    @property
-    @abc.abstractmethod
-    def revocation_reason(self) -> x509.ReasonFlags | None:
-        """
-        The reason the certificate was revoked or None if not specified or
-        not revoked.
-        """
-
-    @property
-    @abc.abstractmethod
-    def this_update(self) -> datetime.datetime:
-        """
-        The most recent time at which the status being indicated is known by
-        the responder to have been correct
-        """
-
-    @property
-    @abc.abstractmethod
-    def next_update(self) -> datetime.datetime | None:
-        """
-        The time when newer information will be available
-        """
-
-    @property
-    @abc.abstractmethod
-    def issuer_key_hash(self) -> bytes:
-        """
-        The hash of the issuer public key
-        """
-
-    @property
-    @abc.abstractmethod
-    def issuer_name_hash(self) -> bytes:
-        """
-        The hash of the issuer name
-        """
-
-    @property
-    @abc.abstractmethod
-    def hash_algorithm(self) -> hashes.HashAlgorithm:
-        """
-        The hash algorithm used in the issuer name and key hashes
-        """
-
-    @property
-    @abc.abstractmethod
-    def serial_number(self) -> int:
-        """
-        The serial number of the cert whose status is being checked
-        """
-
-
-class OCSPResponse(metaclass=abc.ABCMeta):
-    @property
-    @abc.abstractmethod
-    def responses(self) -> typing.Iterator[OCSPSingleResponse]:
-        """
-        An iterator over the individual SINGLERESP structures in the
-        response
-        """
-
-    @property
-    @abc.abstractmethod
-    def response_status(self) -> OCSPResponseStatus:
-        """
-        The status of the response. This is a value from the OCSPResponseStatus
-        enumeration
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_algorithm_oid(self) -> x509.ObjectIdentifier:
-        """
-        The ObjectIdentifier of the signature algorithm
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature_hash_algorithm(
-        self,
-    ) -> hashes.HashAlgorithm | None:
-        """
-        Returns a HashAlgorithm corresponding to the type of the digest signed
-        """
-
-    @property
-    @abc.abstractmethod
-    def signature(self) -> bytes:
-        """
-        The signature bytes
-        """
-
-    @property
-    @abc.abstractmethod
-    def tbs_response_bytes(self) -> bytes:
-        """
-        The tbsResponseData bytes
-        """
-
-    @property
-    @abc.abstractmethod
-    def certificates(self) -> list[x509.Certificate]:
-        """
-        A list of certificates used to help build a chain to verify the OCSP
-        response. This situation occurs when the OCSP responder uses a delegate
-        certificate.
-        """
-
-    @property
-    @abc.abstractmethod
-    def responder_key_hash(self) -> bytes | None:
-        """
-        The responder's key hash or None
-        """
-
-    @property
-    @abc.abstractmethod
-    def responder_name(self) -> x509.Name | None:
-        """
-        The responder's Name or None
-        """
-
-    @property
-    @abc.abstractmethod
-    def produced_at(self) -> datetime.datetime:
-        """
-        The time the response was produced
-        """
-
-    @property
-    @abc.abstractmethod
-    def certificate_status(self) -> OCSPCertStatus:
-        """
-        The status of the certificate (an element from the OCSPCertStatus enum)
-        """
-
-    @property
-    @abc.abstractmethod
-    def revocation_time(self) -> datetime.datetime | None:
-        """
-        The date of when the certificate was revoked or None if not
-        revoked.
-        """
-
-    @property
-    @abc.abstractmethod
-    def revocation_reason(self) -> x509.ReasonFlags | None:
-        """
-        The reason the certificate was revoked or None if not specified or
-        not revoked.
-        """
-
-    @property
-    @abc.abstractmethod
-    def this_update(self) -> datetime.datetime:
-        """
-        The most recent time at which the status being indicated is known by
-        the responder to have been correct
-        """
-
-    @property
-    @abc.abstractmethod
-    def next_update(self) -> datetime.datetime | None:
-        """
-        The time when newer information will be available
-        """
-
-    @property
-    @abc.abstractmethod
-    def issuer_key_hash(self) -> bytes:
-        """
-        The hash of the issuer public key
-        """
-
-    @property
-    @abc.abstractmethod
-    def issuer_name_hash(self) -> bytes:
-        """
-        The hash of the issuer name
-        """
-
-    @property
-    @abc.abstractmethod
-    def hash_algorithm(self) -> hashes.HashAlgorithm:
-        """
-        The hash algorithm used in the issuer name and key hashes
-        """
-
-    @property
-    @abc.abstractmethod
-    def serial_number(self) -> int:
-        """
-        The serial number of the cert whose status is being checked
-        """
-
-    @property
-    @abc.abstractmethod
-    def extensions(self) -> x509.Extensions:
-        """
-        The list of response extensions. Not single response extensions.
-        """
-
-    @property
-    @abc.abstractmethod
-    def single_extensions(self) -> x509.Extensions:
-        """
-        The list of single response extensions. Not response extensions.
-        """
-
-    @abc.abstractmethod
-    def public_bytes(self, encoding: serialization.Encoding) -> bytes:
-        """
-        Serializes the response to DER
-        """
+OCSPRequest = ocsp.OCSPRequest
+OCSPResponse = ocsp.OCSPResponse
+OCSPSingleResponse = ocsp.OCSPSingleResponse
 
 
 class OCSPRequestBuilder:
@@ -514,9 +227,60 @@ class OCSPResponseBuilder:
         if self._response is not None:
             raise ValueError("Only one response per OCSPResponse.")
 
+        if not isinstance(cert, x509.Certificate) or not isinstance(
+            issuer, x509.Certificate
+        ):
+            raise TypeError("cert and issuer must be a Certificate")
+
         singleresp = _SingleResponse(
-            cert,
-            issuer,
+            (cert, issuer),
+            None,
+            algorithm,
+            cert_status,
+            this_update,
+            next_update,
+            revocation_time,
+            revocation_reason,
+        )
+        return OCSPResponseBuilder(
+            singleresp,
+            self._responder_id,
+            self._certs,
+            self._extensions,
+        )
+
+    def add_response_by_hash(
+        self,
+        issuer_name_hash: bytes,
+        issuer_key_hash: bytes,
+        serial_number: int,
+        algorithm: hashes.HashAlgorithm,
+        cert_status: OCSPCertStatus,
+        this_update: datetime.datetime,
+        next_update: datetime.datetime | None,
+        revocation_time: datetime.datetime | None,
+        revocation_reason: x509.ReasonFlags | None,
+    ) -> OCSPResponseBuilder:
+        if self._response is not None:
+            raise ValueError("Only one response per OCSPResponse.")
+
+        if not isinstance(serial_number, int):
+            raise TypeError("serial_number must be an integer")
+
+        utils._check_bytes("issuer_name_hash", issuer_name_hash)
+        utils._check_bytes("issuer_key_hash", issuer_key_hash)
+        _verify_algorithm(algorithm)
+        if algorithm.digest_size != len(
+            issuer_name_hash
+        ) or algorithm.digest_size != len(issuer_key_hash):
+            raise ValueError(
+                "issuer_name_hash and issuer_key_hash must be the same length "
+                "as the digest size of the algorithm"
+            )
+
+        singleresp = _SingleResponse(
+            None,
+            (issuer_name_hash, issuer_key_hash, serial_number),
             algorithm,
             cert_status,
             this_update,
@@ -551,7 +315,7 @@ class OCSPResponseBuilder:
         )
 
     def certificates(
-        self, certs: typing.Iterable[x509.Certificate]
+        self, certs: Iterable[x509.Certificate]
     ) -> OCSPResponseBuilder:
         if self._certs is not None:
             raise ValueError("certificates may only be set once")

@@ -1,5 +1,5 @@
 # sql/schema.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -68,6 +68,7 @@ from .base import DedupeColumnCollection
 from .base import DialectKWArgs
 from .base import Executable
 from .base import SchemaEventTarget as SchemaEventTarget
+from .base import SchemaVisitable as SchemaVisitable
 from .coercions import _document_text_coercion
 from .elements import ClauseElement
 from .elements import ColumnClause
@@ -77,7 +78,6 @@ from .elements import TextClause
 from .selectable import TableClause
 from .type_api import to_instance
 from .visitors import ExternallyTraversible
-from .visitors import InternalTraversal
 from .. import event
 from .. import exc
 from .. import inspection
@@ -92,23 +92,24 @@ from ..util.typing import TypeGuard
 
 if typing.TYPE_CHECKING:
     from ._typing import _AutoIncrementType
+    from ._typing import _CreateDropBind
     from ._typing import _DDLColumnArgument
     from ._typing import _InfoType
     from ._typing import _TextCoercedExpressionArgument
     from ._typing import _TypeEngineArgument
+    from .base import ColumnSet
     from .base import ReadOnlyColumnCollection
     from .compiler import DDLCompiler
     from .elements import BindParameter
+    from .elements import KeyedColumnElement
     from .functions import Function
     from .type_api import TypeEngine
-    from .visitors import _TraverseInternalsType
     from .visitors import anon_map
     from ..engine import Connection
     from ..engine import Engine
     from ..engine.interfaces import _CoreMultiExecuteParams
     from ..engine.interfaces import CoreExecuteOptionsParameter
     from ..engine.interfaces import ExecutionContext
-    from ..engine.mock import MockConnection
     from ..engine.reflection import _ReflectionInfo
     from ..sql.selectable import FromClause
 
@@ -117,13 +118,13 @@ _SI = TypeVar("_SI", bound="SchemaItem")
 _TAB = TypeVar("_TAB", bound="Table")
 
 
-_CreateDropBind = Union["Engine", "Connection", "MockConnection"]
-
 _ConstraintNameArgument = Optional[Union[str, _NoneName]]
 
 _ServerDefaultArgument = Union[
     "FetchedValue", str, TextClause, ColumnElement[Any]
 ]
+
+_ServerOnUpdateArgument = _ServerDefaultArgument
 
 
 class SchemaConst(Enum):
@@ -210,7 +211,7 @@ def _copy_expression(
 
 
 @inspection._self_inspects
-class SchemaItem(SchemaEventTarget, visitors.Visitable):
+class SchemaItem(SchemaVisitable):
     """Base class for items that define a database schema."""
 
     __visit_name__ = "schema_item"
@@ -320,9 +321,10 @@ class Table(
     e.g.::
 
         mytable = Table(
-            "mytable", metadata,
-            Column('mytable_id', Integer, primary_key=True),
-            Column('value', String(50))
+            "mytable",
+            metadata,
+            Column("mytable_id", Integer, primary_key=True),
+            Column("value", String(50)),
         )
 
     The :class:`_schema.Table`
@@ -391,11 +393,6 @@ class Table(
             :meth:`_reflection.Inspector.get_indexes`
 
     """
-
-    _traverse_internals: _TraverseInternalsType = (
-        TableClause._traverse_internals
-        + [("schema", InternalTraversal.dp_string)]
-    )
 
     if TYPE_CHECKING:
 
@@ -479,7 +476,7 @@ class Table(
             table.dispatch.before_parent_attach(table, metadata)
             metadata._add_table(name, schema, table)
             try:
-                table.__init__(name, metadata, *args, _no_init=False, **kw)
+                table.__init__(name, metadata, *args, _no_init=False, **kw)  # type: ignore[misc] # noqa: E501
                 table.dispatch.after_parent_attach(table, metadata)
                 return table
             except Exception:
@@ -637,11 +634,13 @@ class Table(
             :class:`_schema.Column`
             named "y"::
 
-                Table("mytable", metadata,
-                            Column('y', Integer),
-                            extend_existing=True,
-                            autoload_with=engine
-                        )
+                Table(
+                    "mytable",
+                    metadata,
+                    Column("y", Integer),
+                    extend_existing=True,
+                    autoload_with=engine,
+                )
 
             .. seealso::
 
@@ -738,12 +737,12 @@ class Table(
                     "handle the column reflection event"
                     # ...
 
+
                 t = Table(
-                    'sometable',
+                    "sometable",
                     autoload_with=engine,
-                    listeners=[
-                        ('column_reflect', listen_for_reflect)
-                    ])
+                    listeners=[("column_reflect", listen_for_reflect)],
+                )
 
             .. seealso::
 
@@ -1350,7 +1349,7 @@ class Table(
 
             m1 = MetaData()
 
-            user = Table('user', m1, Column('id', Integer, primary_key=True))
+            user = Table("user", m1, Column("id", Integer, primary_key=True))
 
             m2 = MetaData()
             user_copy = user.to_metadata(m2)
@@ -1374,7 +1373,7 @@ class Table(
          unless
          set explicitly::
 
-            m2 = MetaData(schema='newschema')
+            m2 = MetaData(schema="newschema")
 
             # user_copy_one will have "newschema" as the schema name
             user_copy_one = user.to_metadata(m2, schema=None)
@@ -1401,15 +1400,16 @@ class Table(
 
          E.g.::
 
-                def referred_schema_fn(table, to_schema,
-                                                constraint, referred_schema):
-                    if referred_schema == 'base_tables':
+                def referred_schema_fn(table, to_schema, constraint, referred_schema):
+                    if referred_schema == "base_tables":
                         return referred_schema
                     else:
                         return to_schema
 
-                new_table = table.to_metadata(m2, schema="alt_schema",
-                                        referred_schema_fn=referred_schema_fn)
+
+                new_table = table.to_metadata(
+                    m2, schema="alt_schema", referred_schema_fn=referred_schema_fn
+                )
 
         :param name: optional string name indicating the target table name.
          If not specified or None, the table name is retained.  This allows
@@ -1417,7 +1417,7 @@ class Table(
          :class:`_schema.MetaData` target
          with a new name.
 
-        """
+        """  # noqa: E501
         if name is None:
             name = self.name
 
@@ -1439,7 +1439,7 @@ class Table(
 
         args = []
         for col in self.columns:
-            args.append(col._copy(schema=actual_schema))
+            args.append(col._copy(schema=actual_schema, _to_metadata=metadata))
         table = Table(
             name,
             metadata,
@@ -1528,7 +1528,7 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
         onupdate: Optional[Any] = None,
         primary_key: bool = False,
         server_default: Optional[_ServerDefaultArgument] = None,
-        server_onupdate: Optional[FetchedValue] = None,
+        server_onupdate: Optional[_ServerOnUpdateArgument] = None,
         quote: Optional[bool] = None,
         system: bool = False,
         comment: Optional[str] = None,
@@ -1549,7 +1549,7 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
           unless they are a reserved word.  Names with any number of upper
           case characters will be quoted and sent exactly.  Note that this
           behavior applies even for databases which standardize upper
-          case names as case insensitive such as Oracle.
+          case names as case insensitive such as Oracle Database.
 
           The name field may be omitted at construction time and applied
           later, at any time before the Column is associated with a
@@ -1562,10 +1562,10 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
           as well, e.g.::
 
             # use a type with arguments
-            Column('data', String(50))
+            Column("data", String(50))
 
             # use no arguments
-            Column('level', Integer)
+            Column("level", Integer)
 
           The ``type`` argument may be the second positional argument
           or specified by keyword.
@@ -1621,8 +1621,8 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
             will imply that database-specific keywords such as PostgreSQL
             ``SERIAL``, MySQL ``AUTO_INCREMENT``, or ``IDENTITY`` on SQL Server
             should also be rendered.  Not every database backend has an
-            "implied" default generator available; for example the Oracle
-            backend always needs an explicit construct such as
+            "implied" default generator available; for example the Oracle Database
+            backends always needs an explicit construct such as
             :class:`.Identity` to be included with a :class:`.Column` in order
             for the DDL rendered to include auto-generating constructs to also
             be produced in the database.
@@ -1667,8 +1667,12 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
 
                 # turn on autoincrement for this column despite
                 # the ForeignKey()
-                Column('id', ForeignKey('other.id'),
-                            primary_key=True, autoincrement='ignore_fk')
+                Column(
+                    "id",
+                    ForeignKey("other.id"),
+                    primary_key=True,
+                    autoincrement="ignore_fk",
+                )
 
           It is typically not desirable to have "autoincrement" enabled on a
           column that refers to another via foreign key, as such a column is
@@ -1696,7 +1700,7 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
               is not included as this is unnecessary and not recommended
               by the database vendor.  See the section
               :ref:`sqlite_autoincrement` for more background.
-            * Oracle - The Oracle dialect has no default "autoincrement"
+            * Oracle Database - The Oracle Database dialects have no default "autoincrement"
               feature available at this time, instead the :class:`.Identity`
               construct is recommended to achieve this (the :class:`.Sequence`
               construct may also be used).
@@ -1713,10 +1717,10 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
               (see
               `https://www.python.org/dev/peps/pep-0249/#lastrowid
               <https://www.python.org/dev/peps/pep-0249/#lastrowid>`_)
-            * PostgreSQL, SQL Server, Oracle - use RETURNING or an equivalent
+            * PostgreSQL, SQL Server, Oracle Database - use RETURNING or an equivalent
               construct when rendering an INSERT statement, and then retrieving
               the newly generated primary key values after execution
-            * PostgreSQL, Oracle for :class:`_schema.Table` objects that
+            * PostgreSQL, Oracle Database for :class:`_schema.Table` objects that
               set :paramref:`_schema.Table.implicit_returning` to False -
               for a :class:`.Sequence` only, the :class:`.Sequence` is invoked
               explicitly before the INSERT statement takes place so that the
@@ -1785,7 +1789,7 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
                     "some_table",
                     metadata,
                     Column("x", Integer),
-                    Index("ix_some_table_x", "x")
+                    Index("ix_some_table_x", "x"),
                 )
 
             To add the :paramref:`_schema.Index.unique` flag to the
@@ -1867,14 +1871,22 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
 
             String types will be emitted as-is, surrounded by single quotes::
 
-                Column('x', Text, server_default="val")
+                Column("x", Text, server_default="val")
+
+            will render:
+
+            .. sourcecode:: sql
 
                 x TEXT DEFAULT 'val'
 
             A :func:`~sqlalchemy.sql.expression.text` expression will be
             rendered as-is, without quotes::
 
-                Column('y', DateTime, server_default=text('NOW()'))
+                Column("y", DateTime, server_default=text("NOW()"))
+
+            will render:
+
+            .. sourcecode:: sql
 
                 y DATETIME DEFAULT NOW()
 
@@ -1889,20 +1901,21 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
                 from sqlalchemy.dialects.postgresql import array
 
                 engine = create_engine(
-                    'postgresql+psycopg2://scott:tiger@localhost/mydatabase'
+                    "postgresql+psycopg2://scott:tiger@localhost/mydatabase"
                 )
                 metadata_obj = MetaData()
                 tbl = Table(
-                        "foo",
-                        metadata_obj,
-                        Column("bar",
-                               ARRAY(Text),
-                               server_default=array(["biz", "bang", "bash"])
-                               )
+                    "foo",
+                    metadata_obj,
+                    Column(
+                        "bar", ARRAY(Text), server_default=array(["biz", "bang", "bash"])
+                    ),
                 )
                 metadata_obj.create_all(engine)
 
-            The above results in a table created with the following SQL::
+            The above results in a table created with the following SQL:
+
+            .. sourcecode:: sql
 
                 CREATE TABLE foo (
                     bar TEXT[] DEFAULT ARRAY['biz', 'bang', 'bash']
@@ -1967,12 +1980,7 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
             :class:`_schema.UniqueConstraint` construct explicitly at the
             level of the :class:`_schema.Table` construct itself::
 
-                Table(
-                    "some_table",
-                    metadata,
-                    Column("x", Integer),
-                    UniqueConstraint("x")
-                )
+                Table("some_table", metadata, Column("x", Integer), UniqueConstraint("x"))
 
             The :paramref:`_schema.UniqueConstraint.name` parameter
             of the unique constraint object is left at its default value
@@ -2234,7 +2242,7 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
         return _DefaultDescriptionTuple._from_column_default(self.onupdate)
 
     @util.memoized_property
-    def _gen_static_annotations_cache_key(self) -> bool:  # type: ignore
+    def _gen_static_annotations_cache_key(self) -> bool:
         """special attribute used by cache key gen, if true, we will
         use a static cache key for the annotations dictionary, else we
         will generate a new cache key for annotations each time.
@@ -2480,6 +2488,8 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
         server_onupdate = self.server_onupdate
         if isinstance(server_default, (Computed, Identity)):
             # TODO: likely should be copied in all cases
+            # TODO: if a Sequence, we would need to transfer the Sequence
+            # .metadata as well
             args.append(server_default._copy(**kw))
             server_default = server_onupdate = None
 
@@ -2608,6 +2618,8 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
     def _make_proxy(
         self,
         selectable: FromClause,
+        primary_key: ColumnSet,
+        foreign_keys: Set[KeyedColumnElement[Any]],
         name: Optional[str] = None,
         key: Optional[str] = None,
         name_is_truncatable: bool = False,
@@ -2677,10 +2689,13 @@ class Column(DialectKWArgs, SchemaItem, ColumnClause[_T]):
         c._propagate_attrs = selectable._propagate_attrs
         if selectable._is_clone_of is not None:
             c._is_clone_of = selectable._is_clone_of.columns.get(c.key)
+
         if self.primary_key:
-            selectable.primary_key.add(c)  # type: ignore
+            primary_key.add(c)
+
         if fk:
-            selectable.foreign_keys.update(fk)  # type: ignore
+            foreign_keys.update(fk)  # type: ignore
+
         return c.key, c
 
 
@@ -2741,8 +2756,10 @@ class ForeignKey(DialectKWArgs, SchemaItem):
     object,
     e.g.::
 
-        t = Table("remote_table", metadata,
-            Column("remote_id", ForeignKey("main_table.id"))
+        t = Table(
+            "remote_table",
+            metadata,
+            Column("remote_id", ForeignKey("main_table.id")),
         )
 
     Note that ``ForeignKey`` is only a marker object that defines
@@ -2819,9 +2836,18 @@ class ForeignKey(DialectKWArgs, SchemaItem):
             issuing DDL for this constraint. Typical values include CASCADE,
             DELETE and RESTRICT.
 
+            .. seealso::
+
+                :ref:`on_update_on_delete`
+
         :param ondelete: Optional string. If set, emit ON DELETE <value> when
             issuing DDL for this constraint. Typical values include CASCADE,
-            DELETE and RESTRICT.
+            SET NULL and RESTRICT.  Some dialects may allow for additional
+            syntaxes.
+
+            .. seealso::
+
+                :ref:`on_update_on_delete`
 
         :param deferrable: Optional bool. If set, emit DEFERRABLE or NOT
             DEFERRABLE when issuing DDL for this constraint.
@@ -3391,12 +3417,11 @@ class ColumnDefault(DefaultGenerator, ABC):
 
     For example, the following::
 
-        Column('foo', Integer, default=50)
+        Column("foo", Integer, default=50)
 
     Is equivalent to::
 
-        Column('foo', Integer, ColumnDefault(50))
-
+        Column("foo", Integer, ColumnDefault(50))
 
     """
 
@@ -3683,9 +3708,14 @@ class Sequence(HasSchemaAttr, IdentityOptions, DefaultGenerator):
     The :class:`.Sequence` is typically associated with a primary key column::
 
         some_table = Table(
-            'some_table', metadata,
-            Column('id', Integer, Sequence('some_table_seq', start=1),
-            primary_key=True)
+            "some_table",
+            metadata,
+            Column(
+                "id",
+                Integer,
+                Sequence("some_table_seq", start=1),
+                primary_key=True,
+            ),
         )
 
     When CREATE TABLE is emitted for the above :class:`_schema.Table`, if the
@@ -3796,11 +3826,11 @@ class Sequence(HasSchemaAttr, IdentityOptions, DefaultGenerator):
 
         :param cache: optional integer value; number of future values in the
          sequence which are calculated in advance.  Renders the CACHE keyword
-         understood by Oracle and PostgreSQL.
+         understood by Oracle Database and PostgreSQL.
 
         :param order: optional boolean value; if ``True``, renders the
-         ORDER keyword, understood by Oracle, indicating the sequence is
-         definitively ordered.   May be necessary to provide deterministic
+         ORDER keyword, understood by Oracle Database, indicating the sequence
+         is definitively ordered.   May be necessary to provide deterministic
          ordering using Oracle RAC.
 
         :param data_type: The type to be returned by the sequence, for
@@ -3961,7 +3991,7 @@ class FetchedValue(SchemaEventTarget):
 
     E.g.::
 
-        Column('foo', Integer, FetchedValue())
+        Column("foo", Integer, FetchedValue())
 
     Would indicate that some trigger or default generator
     will create a new value for the ``foo`` column during an
@@ -4027,11 +4057,11 @@ class DefaultClause(FetchedValue):
 
     For example, the following::
 
-        Column('foo', Integer, server_default="50")
+        Column("foo", Integer, server_default="50")
 
     Is equivalent to::
 
-        Column('foo', Integer, DefaultClause("50"))
+        Column("foo", Integer, DefaultClause("50"))
 
     """
 
@@ -4210,6 +4240,10 @@ class ColumnCollectionMixin:
         ] = _gather_expressions
 
         if processed_expressions is not None:
+
+            # this is expected to be an empty list
+            assert not processed_expressions
+
             self._pending_colargs = []
             for (
                 expr,
@@ -4597,12 +4631,21 @@ class ForeignKeyConstraint(ColumnCollectionConstraint):
         :param name: Optional, the in-database name of the key.
 
         :param onupdate: Optional string. If set, emit ON UPDATE <value> when
-          issuing DDL for this constraint. Typical values include CASCADE,
-          DELETE and RESTRICT.
+            issuing DDL for this constraint. Typical values include CASCADE,
+            DELETE and RESTRICT.
+
+            .. seealso::
+
+                :ref:`on_update_on_delete`
 
         :param ondelete: Optional string. If set, emit ON DELETE <value> when
-          issuing DDL for this constraint. Typical values include CASCADE,
-          DELETE and RESTRICT.
+            issuing DDL for this constraint. Typical values include CASCADE,
+            SET NULL and RESTRICT.  Some dialects may allow for additional
+            syntaxes.
+
+            .. seealso::
+
+                :ref:`on_update_on_delete`
 
         :param deferrable: Optional bool. If set, emit DEFERRABLE or NOT
           DEFERRABLE when issuing DDL for this constraint.
@@ -4860,11 +4903,13 @@ class PrimaryKeyConstraint(ColumnCollectionConstraint):
     :class:`_schema.Column` objects corresponding to those marked with
     the :paramref:`_schema.Column.primary_key` flag::
 
-        >>> my_table = Table('mytable', metadata,
-        ...                 Column('id', Integer, primary_key=True),
-        ...                 Column('version_id', Integer, primary_key=True),
-        ...                 Column('data', String(50))
-        ...     )
+        >>> my_table = Table(
+        ...     "mytable",
+        ...     metadata,
+        ...     Column("id", Integer, primary_key=True),
+        ...     Column("version_id", Integer, primary_key=True),
+        ...     Column("data", String(50)),
+        ... )
         >>> my_table.primary_key
         PrimaryKeyConstraint(
             Column('id', Integer(), table=<mytable>,
@@ -4878,13 +4923,14 @@ class PrimaryKeyConstraint(ColumnCollectionConstraint):
     the "name" of the constraint can also be specified, as well as other
     options which may be recognized by dialects::
 
-        my_table = Table('mytable', metadata,
-                    Column('id', Integer),
-                    Column('version_id', Integer),
-                    Column('data', String(50)),
-                    PrimaryKeyConstraint('id', 'version_id',
-                                         name='mytable_pk')
-                )
+        my_table = Table(
+            "mytable",
+            metadata,
+            Column("id", Integer),
+            Column("version_id", Integer),
+            Column("data", String(50)),
+            PrimaryKeyConstraint("id", "version_id", name="mytable_pk"),
+        )
 
     The two styles of column-specification should generally not be mixed.
     An warning is emitted if the columns present in the
@@ -4902,13 +4948,14 @@ class PrimaryKeyConstraint(ColumnCollectionConstraint):
     primary key column collection from the :class:`_schema.Table` based on the
     flags::
 
-        my_table = Table('mytable', metadata,
-                    Column('id', Integer, primary_key=True),
-                    Column('version_id', Integer, primary_key=True),
-                    Column('data', String(50)),
-                    PrimaryKeyConstraint(name='mytable_pk',
-                                         mssql_clustered=True)
-                )
+        my_table = Table(
+            "mytable",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("version_id", Integer, primary_key=True),
+            Column("data", String(50)),
+            PrimaryKeyConstraint(name="mytable_pk", mssql_clustered=True),
+        )
 
     """
 
@@ -5105,19 +5152,21 @@ class Index(
 
     E.g.::
 
-        sometable = Table("sometable", metadata,
-                        Column("name", String(50)),
-                        Column("address", String(100))
-                    )
+        sometable = Table(
+            "sometable",
+            metadata,
+            Column("name", String(50)),
+            Column("address", String(100)),
+        )
 
         Index("some_index", sometable.c.name)
 
     For a no-frills, single column index, adding
     :class:`_schema.Column` also supports ``index=True``::
 
-        sometable = Table("sometable", metadata,
-                        Column("name", String(50), index=True)
-                    )
+        sometable = Table(
+            "sometable", metadata, Column("name", String(50), index=True)
+        )
 
     For a composite index, multiple columns can be specified::
 
@@ -5136,22 +5185,26 @@ class Index(
     the names
     of the indexed columns can be specified as strings::
 
-        Table("sometable", metadata,
-                        Column("name", String(50)),
-                        Column("address", String(100)),
-                        Index("some_index", "name", "address")
-                )
+        Table(
+            "sometable",
+            metadata,
+            Column("name", String(50)),
+            Column("address", String(100)),
+            Index("some_index", "name", "address"),
+        )
 
     To support functional or expression-based indexes in this form, the
     :func:`_expression.text` construct may be used::
 
         from sqlalchemy import text
 
-        Table("sometable", metadata,
-                        Column("name", String(50)),
-                        Column("address", String(100)),
-                        Index("some_index", text("lower(name)"))
-                )
+        Table(
+            "sometable",
+            metadata,
+            Column("name", String(50)),
+            Column("address", String(100)),
+            Index("some_index", text("lower(name)")),
+        )
 
     .. seealso::
 
@@ -5304,7 +5357,10 @@ class Index(
         )
 
 
-_NamingSchemaCallable = Callable[[Constraint, Table], str]
+_NamingSchemaCallable = Union[
+    Callable[[Constraint, Table], str],
+    Callable[[Index, Table], str],
+]
 _NamingSchemaDirective = Union[str, _NamingSchemaCallable]
 
 
@@ -5566,7 +5622,7 @@ class MetaData(HasSchemaAttr):
     def clear(self) -> None:
         """Clear all Table objects from this MetaData."""
 
-        dict.clear(self.tables)  # type: ignore
+        dict.clear(self.tables)
         self._schemas.clear()
         self._fk_memos.clear()
 
@@ -5780,13 +5836,17 @@ class MetaData(HasSchemaAttr):
 
             kind = util.preloaded.engine_reflection.ObjectKind.TABLE
             available: util.OrderedSet[str] = util.OrderedSet(
-                insp.get_table_names(schema)
+                insp.get_table_names(schema, **dialect_kwargs)
             )
             if views:
                 kind = util.preloaded.engine_reflection.ObjectKind.ANY
-                available.update(insp.get_view_names(schema))
+                available.update(insp.get_view_names(schema, **dialect_kwargs))
                 try:
-                    available.update(insp.get_materialized_view_names(schema))
+                    available.update(
+                        insp.get_materialized_view_names(
+                            schema, **dialect_kwargs
+                        )
+                    )
                 except NotImplementedError:
                     pass
 
@@ -5909,9 +5969,11 @@ class Computed(FetchedValue, SchemaItem):
 
         from sqlalchemy import Computed
 
-        Table('square', metadata_obj,
-            Column('side', Float, nullable=False),
-            Column('area', Float, Computed('side * side'))
+        Table(
+            "square",
+            metadata_obj,
+            Column("side", Float, nullable=False),
+            Column("area", Float, Computed("side * side")),
         )
 
     See the linked documentation below for complete details.
@@ -6016,9 +6078,11 @@ class Identity(IdentityOptions, FetchedValue, SchemaItem):
 
         from sqlalchemy import Identity
 
-        Table('foo', metadata_obj,
-            Column('id', Integer, Identity())
-            Column('description', Text),
+        Table(
+            "foo",
+            metadata_obj,
+            Column("id", Integer, Identity()),
+            Column("description", Text),
         )
 
     See the linked documentation below for complete details.
@@ -6078,7 +6142,7 @@ class Identity(IdentityOptions, FetchedValue, SchemaItem):
         :param on_null:
           Set to ``True`` to specify ON NULL in conjunction with a
           ``always=False`` identity column. This option is only supported on
-          some backends, like Oracle.
+          some backends, like Oracle Database.
 
         :param start: the starting index of the sequence.
         :param increment: the increment value of the sequence.

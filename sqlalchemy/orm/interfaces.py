@@ -1,5 +1,5 @@
 # orm/interfaces.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -29,6 +29,7 @@ from typing import Dict
 from typing import Generic
 from typing import Iterator
 from typing import List
+from typing import Mapping
 from typing import NamedTuple
 from typing import NoReturn
 from typing import Optional
@@ -174,7 +175,7 @@ class _IntrospectsAnnotations:
         extracted_mapped_annotation: Optional[_AnnotationScanType],
         is_dataclass_field: bool,
     ) -> None:
-        """Perform class-specific initializaton at early declarative scanning
+        """Perform class-specific initialization at early declarative scanning
         time.
 
         .. versionadded:: 2.0
@@ -206,6 +207,8 @@ class _AttributeOptions(NamedTuple):
     dataclasses_default_factory: Union[_NoArg, Callable[[], Any]]
     dataclasses_compare: Union[_NoArg, bool]
     dataclasses_kw_only: Union[_NoArg, bool]
+    dataclasses_hash: Union[_NoArg, bool, None]
+    dataclasses_dataclass_metadata: Union[_NoArg, Mapping[Any, Any], None]
 
     def _as_dataclass_field(self, key: str) -> Any:
         """Return a ``dataclasses.Field`` object given these arguments."""
@@ -223,6 +226,10 @@ class _AttributeOptions(NamedTuple):
             kw["compare"] = self.dataclasses_compare
         if self.dataclasses_kw_only is not _NoArg.NO_ARG:
             kw["kw_only"] = self.dataclasses_kw_only
+        if self.dataclasses_hash is not _NoArg.NO_ARG:
+            kw["hash"] = self.dataclasses_hash
+        if self.dataclasses_dataclass_metadata is not _NoArg.NO_ARG:
+            kw["metadata"] = self.dataclasses_dataclass_metadata
 
         if "default" in kw and callable(kw["default"]):
             # callable defaults are ambiguous. deprecate them in favour of
@@ -260,7 +267,7 @@ class _AttributeOptions(NamedTuple):
         key: str,
         annotation: _AnnotationScanType,
         mapped_container: Optional[Any],
-        elem: _T,
+        elem: Any,
     ) -> Union[
         Tuple[str, _AnnotationScanType],
         Tuple[str, _AnnotationScanType, dataclasses.Field[Any]],
@@ -302,10 +309,14 @@ _DEFAULT_ATTRIBUTE_OPTIONS = _AttributeOptions(
     _NoArg.NO_ARG,
     _NoArg.NO_ARG,
     _NoArg.NO_ARG,
+    _NoArg.NO_ARG,
+    _NoArg.NO_ARG,
 )
 
 _DEFAULT_READONLY_ATTRIBUTE_OPTIONS = _AttributeOptions(
     False,
+    _NoArg.NO_ARG,
+    _NoArg.NO_ARG,
     _NoArg.NO_ARG,
     _NoArg.NO_ARG,
     _NoArg.NO_ARG,
@@ -680,27 +691,37 @@ class PropComparator(SQLORMOperations[_T_co], Generic[_T_co], ColumnOperators):
 
         # definition of custom PropComparator subclasses
 
-        from sqlalchemy.orm.properties import \
-                                ColumnProperty,\
-                                Composite,\
-                                Relationship
+        from sqlalchemy.orm.properties import (
+            ColumnProperty,
+            Composite,
+            Relationship,
+        )
+
 
         class MyColumnComparator(ColumnProperty.Comparator):
             def __eq__(self, other):
                 return self.__clause_element__() == other
+
 
         class MyRelationshipComparator(Relationship.Comparator):
             def any(self, expression):
                 "define the 'any' operation"
                 # ...
 
+
         class MyCompositeComparator(Composite.Comparator):
             def __gt__(self, other):
                 "redefine the 'greater than' operation"
 
-                return sql.and_(*[a>b for a, b in
-                                  zip(self.__clause_element__().clauses,
-                                      other.__composite_values__())])
+                return sql.and_(
+                    *[
+                        a > b
+                        for a, b in zip(
+                            self.__clause_element__().clauses,
+                            other.__composite_values__(),
+                        )
+                    ]
+                )
 
 
         # application of custom PropComparator subclasses
@@ -708,17 +729,22 @@ class PropComparator(SQLORMOperations[_T_co], Generic[_T_co], ColumnOperators):
         from sqlalchemy.orm import column_property, relationship, composite
         from sqlalchemy import Column, String
 
-        class SomeMappedClass(Base):
-            some_column = column_property(Column("some_column", String),
-                                comparator_factory=MyColumnComparator)
 
-            some_relationship = relationship(SomeOtherClass,
-                                comparator_factory=MyRelationshipComparator)
+        class SomeMappedClass(Base):
+            some_column = column_property(
+                Column("some_column", String),
+                comparator_factory=MyColumnComparator,
+            )
+
+            some_relationship = relationship(
+                SomeOtherClass, comparator_factory=MyRelationshipComparator
+            )
 
             some_composite = composite(
-                    Column("a", String), Column("b", String),
-                    comparator_factory=MyCompositeComparator
-                )
+                Column("a", String),
+                Column("b", String),
+                comparator_factory=MyCompositeComparator,
+            )
 
     Note that for column-level operator redefinition, it's usually
     simpler to define the operators at the Core level, using the
@@ -860,8 +886,9 @@ class PropComparator(SQLORMOperations[_T_co], Generic[_T_co], ColumnOperators):
 
         e.g.::
 
-            query.join(Company.employees.of_type(Engineer)).\
-               filter(Engineer.name=='foo')
+            query.join(Company.employees.of_type(Engineer)).filter(
+                Engineer.name == "foo"
+            )
 
         :param \class_: a class or mapper indicating that criterion will be
             against this specific subclass.
@@ -887,11 +914,11 @@ class PropComparator(SQLORMOperations[_T_co], Generic[_T_co], ColumnOperators):
 
 
             stmt = select(User).join(
-                User.addresses.and_(Address.email_address != 'foo')
+                User.addresses.and_(Address.email_address != "foo")
             )
 
             stmt = select(User).options(
-                joinedload(User.addresses.and_(Address.email_address != 'foo'))
+                joinedload(User.addresses.and_(Address.email_address != "foo"))
             )
 
         .. versionadded:: 1.4

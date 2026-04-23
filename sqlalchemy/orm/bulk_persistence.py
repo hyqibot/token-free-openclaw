@@ -1,5 +1,5 @@
 # orm/bulk_persistence.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -119,13 +119,35 @@ def _bulk_insert(
         )
 
     if isstates:
+        if TYPE_CHECKING:
+            mappings = cast(Iterable[InstanceState[_O]], mappings)
+
         if return_defaults:
+            # list of states allows us to attach .key for return_defaults case
             states = [(state, state.dict) for state in mappings]
             mappings = [dict_ for (state, dict_) in states]
         else:
             mappings = [state.dict for state in mappings]
     else:
-        mappings = [dict(m) for m in mappings]
+        if TYPE_CHECKING:
+            mappings = cast(Iterable[Dict[str, Any]], mappings)
+
+        if return_defaults:
+            # use dictionaries given, so that newly populated defaults
+            # can be delivered back to the caller (see #11661). This is **not**
+            # compatible with other use cases such as a session-executed
+            # insert() construct, as this will confuse the case of
+            # insert-per-subclass for joined inheritance cases (see
+            # test_bulk_statements.py::BulkDMLReturningJoinedInhTest).
+            #
+            # So in this conditional, we have **only** called
+            # session.bulk_insert_mappings() which does not have this
+            # requirement
+            mappings = list(mappings)
+        else:
+            # for all other cases we need to establish a local dictionary
+            # so that the incoming dictionaries aren't mutated
+            mappings = [dict(m) for m in mappings]
         _expand_composites(mapper, mappings)
 
     connection = session_transaction.connection(base_mapper)
@@ -423,10 +445,23 @@ class ORMDMLState(AbstractORMCompileState):
                 )
 
     @classmethod
-    def _get_multi_crud_kv_pairs(cls, statement, kv_iterator):
-        plugin_subject = statement._propagate_attrs["plugin_subject"]
+    def _get_dml_plugin_subject(cls, statement):
+        plugin_subject = statement.table._propagate_attrs.get("plugin_subject")
 
-        if not plugin_subject or not plugin_subject.mapper:
+        if (
+            not plugin_subject
+            or not plugin_subject.mapper
+            or plugin_subject
+            is not statement._propagate_attrs["plugin_subject"]
+        ):
+            return None
+        return plugin_subject
+
+    @classmethod
+    def _get_multi_crud_kv_pairs(cls, statement, kv_iterator):
+        plugin_subject = cls._get_dml_plugin_subject(statement)
+
+        if not plugin_subject:
             return UpdateDMLState._get_multi_crud_kv_pairs(
                 statement, kv_iterator
             )
@@ -446,13 +481,12 @@ class ORMDMLState(AbstractORMCompileState):
             needs_to_be_cacheable
         ), "no test coverage for needs_to_be_cacheable=False"
 
-        plugin_subject = statement._propagate_attrs["plugin_subject"]
+        plugin_subject = cls._get_dml_plugin_subject(statement)
 
-        if not plugin_subject or not plugin_subject.mapper:
+        if not plugin_subject:
             return UpdateDMLState._get_crud_kv_pairs(
                 statement, kv_iterator, needs_to_be_cacheable
             )
-
         return list(
             cls._get_orm_crud_kv_pairs(
                 plugin_subject.mapper,
@@ -597,6 +631,7 @@ class ORMDMLState(AbstractORMCompileState):
             querycontext = QueryContext(
                 compile_state.from_statement_ctx,
                 compile_state.select_statement,
+                statement,
                 params,
                 session,
                 load_options,
@@ -621,6 +656,7 @@ class BulkUDCompileState(ORMDMLState):
         _eval_condition = None
         _matched_rows = None
         _identity_token = None
+        _populate_existing: bool = False
 
     @classmethod
     def can_use_returning(
@@ -653,6 +689,7 @@ class BulkUDCompileState(ORMDMLState):
             {
                 "synchronize_session",
                 "autoflush",
+                "populate_existing",
                 "identity_token",
                 "is_delete_using",
                 "is_update_from",
@@ -837,53 +874,39 @@ class BulkUDCompileState(ORMDMLState):
         return return_crit
 
     @classmethod
-    def _interpret_returning_rows(cls, mapper, rows):
-        """translate from local inherited table columns to base mapper
-        primary key columns.
+    def _interpret_returning_rows(cls, result, mapper, rows):
+        """return rows that indicate PK cols in mapper.primary_key position
+        for RETURNING rows.
 
-        Joined inheritance mappers always establish the primary key in terms of
-        the base table.   When we UPDATE a sub-table, we can only get
-        RETURNING for the sub-table's columns.
+        Prior to 2.0.36, this method seemed to be written for some kind of
+        inheritance scenario but the scenario was unused for actual joined
+        inheritance, and the function instead seemed to perform some kind of
+        partial translation that would remove non-PK cols if the PK cols
+        happened to be first in the row, but not otherwise.  The joined
+        inheritance walk feature here seems to have never been used as it was
+        always skipped by the "local_table" check.
 
-        Here, we create a lookup from the local sub table's primary key
-        columns to the base table PK columns so that we can get identity
-        key values from RETURNING that's against the joined inheritance
-        sub-table.
-
-        the complexity here is to support more than one level deep of
-        inheritance, where we have to link columns to each other across
-        the inheritance hierarchy.
+        As of 2.0.36 the function strips away non-PK cols and provides the
+        PK cols for the table in mapper PK order.
 
         """
 
-        if mapper.local_table is not mapper.base_mapper.local_table:
-            return rows
+        try:
+            if mapper.local_table is not mapper.base_mapper.local_table:
+                # TODO: dive more into how a local table PK is used for fetch
+                # sync, not clear if this is correct as it depends on the
+                # downstream routine to fetch rows using
+                # local_table.primary_key order
+                pk_keys = result._tuple_getter(mapper.local_table.primary_key)
+            else:
+                pk_keys = result._tuple_getter(mapper.primary_key)
+        except KeyError:
+            # can't use these rows, they don't have PK cols in them
+            # this is an unusual case where the user would have used
+            # .return_defaults()
+            return []
 
-        # this starts as a mapping of
-        # local_pk_col: local_pk_col.
-        # we will then iteratively rewrite the "value" of the dict with
-        # each successive superclass column
-        local_pk_to_base_pk = {pk: pk for pk in mapper.local_table.primary_key}
-
-        for mp in mapper.iterate_to_root():
-            if mp.inherits is None:
-                break
-            elif mp.local_table is mp.inherits.local_table:
-                continue
-
-            t_to_e = dict(mp._table_to_equated[mp.inherits.local_table])
-            col_to_col = {sub_pk: super_pk for super_pk, sub_pk in t_to_e[mp]}
-            for pk, super_ in local_pk_to_base_pk.items():
-                local_pk_to_base_pk[pk] = col_to_col[super_]
-
-        lookup = {
-            local_pk_to_base_pk[lpk]: idx
-            for idx, lpk in enumerate(mapper.local_table.primary_key)
-        }
-        primary_key_convert = [
-            lookup[bpk] for bpk in mapper.base_mapper.primary_key
-        ]
-        return [tuple(row[idx] for idx in primary_key_convert) for row in rows]
+        return [pk_keys(row) for row in rows]
 
     @classmethod
     def _get_matched_objects_on_criteria(cls, update_options, states):
@@ -1084,7 +1107,7 @@ class BulkUDCompileState(ORMDMLState):
         # call can_use_returning() before invoking the statement and get
         # answer?, why does this go through the whole execute phase using an
         # event?  Answer: because we are integrating with extensions such
-        # as the horizontal sharding extention that "multiplexes" an individual
+        # as the horizontal sharding extension that "multiplexes" an individual
         # statement run through multiple engines, and it uses
         # do_orm_execute() to do that.
 
@@ -1195,7 +1218,7 @@ class BulkORMInsert(ORMDMLState, InsertDMLState):
             # for ORM object loading, like ORMContext, we have to disable
             # result set adapt_to_context, because we will be generating a
             # new statement with specific columns that's cached inside of
-            # an ORMFromStatementCompileState, which we will re-use for
+            # an ORMFromStatementCompileState, which we will reuse for
             # each result.
             if not execution_options:
                 execution_options = context._orm_load_exec_options
@@ -1446,6 +1469,9 @@ class BulkORMUpdate(BulkUDCompileState, UpdateDMLState):
 
         new_stmt = statement._clone()
 
+        if new_stmt.table._annotations["parententity"] is mapper:
+            new_stmt.table = mapper.local_table
+
         # note if the statement has _multi_values, these
         # are passed through to the new statement, which will then raise
         # InvalidRequestError because UPDATE doesn't support multi_values
@@ -1564,9 +1590,19 @@ class BulkORMUpdate(BulkUDCompileState, UpdateDMLState):
         bind_arguments: _BindArguments,
         conn: Connection,
     ) -> _result.Result:
+
         update_options = execution_options.get(
             "_sa_orm_update_options", cls.default_update_options
         )
+
+        if update_options._populate_existing:
+            load_options = execution_options.get(
+                "_sa_orm_load_options", QueryContext.default_load_options
+            )
+            load_options += {"_populate_existing": True}
+            execution_options = execution_options.union(
+                {"_sa_orm_load_options": load_options}
+            )
 
         if update_options._dml_strategy not in (
             "orm",
@@ -1723,7 +1759,10 @@ class BulkORMUpdate(BulkUDCompileState, UpdateDMLState):
             session,
             update_options,
             statement,
+            result.context.compiled_parameters[0],
             [(obj, state, dict_) for obj, state, dict_, _ in matched_objects],
+            result.prefetch_cols(),
+            result.postfetch_cols(),
         )
 
     @classmethod
@@ -1735,9 +1774,8 @@ class BulkORMUpdate(BulkUDCompileState, UpdateDMLState):
         returned_defaults_rows = result.returned_defaults_rows
         if returned_defaults_rows:
             pk_rows = cls._interpret_returning_rows(
-                target_mapper, returned_defaults_rows
+                result, target_mapper, returned_defaults_rows
             )
-
             matched_rows = [
                 tuple(row) + (update_options._identity_token,)
                 for row in pk_rows
@@ -1768,6 +1806,7 @@ class BulkORMUpdate(BulkUDCompileState, UpdateDMLState):
             session,
             update_options,
             statement,
+            result.context.compiled_parameters[0],
             [
                 (
                     obj,
@@ -1776,16 +1815,26 @@ class BulkORMUpdate(BulkUDCompileState, UpdateDMLState):
                 )
                 for obj in objs
             ],
+            result.prefetch_cols(),
+            result.postfetch_cols(),
         )
 
     @classmethod
     def _apply_update_set_values_to_objects(
-        cls, session, update_options, statement, matched_objects
+        cls,
+        session,
+        update_options,
+        statement,
+        effective_params,
+        matched_objects,
+        prefetch_cols,
+        postfetch_cols,
     ):
         """apply values to objects derived from an update statement, e.g.
         UPDATE..SET <values>
 
         """
+
         mapper = update_options._subject_mapper
         target_cls = mapper.class_
         evaluator_compiler = evaluator._EvaluatorCompiler(target_cls)
@@ -1808,7 +1857,35 @@ class BulkORMUpdate(BulkUDCompileState, UpdateDMLState):
         attrib = {k for k, v in resolved_keys_as_propnames}
 
         states = set()
+
+        to_prefetch = {
+            c
+            for c in prefetch_cols
+            if c.key in effective_params
+            and c in mapper._columntoproperty
+            and c.key not in evaluated_keys
+        }
+        to_expire = {
+            mapper._columntoproperty[c].key
+            for c in postfetch_cols
+            if c in mapper._columntoproperty
+        }.difference(evaluated_keys)
+
+        prefetch_transfer = [
+            (mapper._columntoproperty[c].key, c.key) for c in to_prefetch
+        ]
+
         for obj, state, dict_ in matched_objects:
+
+            dict_.update(
+                {
+                    col_to_prop: effective_params[c_key]
+                    for col_to_prop, c_key in prefetch_transfer
+                }
+            )
+
+            state._expire_attributes(state.dict, to_expire)
+
             to_evaluate = state.unmodified.intersection(evaluated_keys)
 
             for key in to_evaluate:
@@ -1864,6 +1941,9 @@ class BulkORMDelete(BulkUDCompileState, DeleteDMLState):
         )
 
         new_stmt = statement._clone()
+
+        if new_stmt.table._annotations["parententity"] is mapper:
+            new_stmt.table = mapper.local_table
 
         new_crit = cls._adjust_for_extra_criteria(
             self.global_attributes, mapper
@@ -2025,7 +2105,7 @@ class BulkORMDelete(BulkUDCompileState, DeleteDMLState):
 
         if returned_defaults_rows:
             pk_rows = cls._interpret_returning_rows(
-                target_mapper, returned_defaults_rows
+                result, target_mapper, returned_defaults_rows
             )
 
             matched_rows = [

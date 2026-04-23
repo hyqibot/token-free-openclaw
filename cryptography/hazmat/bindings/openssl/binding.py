@@ -10,20 +10,18 @@ import threading
 import types
 import typing
 import warnings
+from collections.abc import Callable
 
 import cryptography
 from cryptography.exceptions import InternalError
 from cryptography.hazmat.bindings._rust import _openssl, openssl
 from cryptography.hazmat.bindings.openssl._conditional import CONDITIONAL_NAMES
+from cryptography.utils import CryptographyDeprecationWarning
 
 
-def _openssl_assert(
-    ok: bool,
-    errors: list[openssl.OpenSSLError] | None = None,
-) -> None:
+def _openssl_assert(ok: bool) -> None:
     if not ok:
-        if errors is None:
-            errors = openssl.capture_error_stack()
+        errors = openssl.capture_error_stack()
 
         raise InternalError(
             "Unknown OpenSSL error. This error is commonly encountered when "
@@ -39,7 +37,7 @@ def _openssl_assert(
 
 def build_conditional_library(
     lib: typing.Any,
-    conditional_names: dict[str, typing.Callable[[], list[str]]],
+    conditional_names: dict[str, Callable[[], list[str]]],
 ) -> typing.Any:
     conditional_lib = types.ModuleType("lib")
     conditional_lib._original_lib = lib  # type: ignore[attr-defined]
@@ -60,31 +58,13 @@ class Binding:
     OpenSSL API wrapper.
     """
 
-    lib: typing.ClassVar = None
+    lib: typing.ClassVar[typing.Any] = None
     ffi = _openssl.ffi
     _lib_loaded = False
     _init_lock = threading.Lock()
-    _legacy_provider: typing.Any = ffi.NULL
-    _default_provider: typing.Any = ffi.NULL
 
     def __init__(self) -> None:
         self._ensure_ffi_initialized()
-
-    def _enable_fips(self) -> None:
-        # This function enables FIPS mode for OpenSSL 3.0.0 on installs that
-        # have the FIPS provider installed properly.
-        _openssl_assert(self.lib.CRYPTOGRAPHY_OPENSSL_300_OR_GREATER)
-        self._base_provider = self.lib.OSSL_PROVIDER_load(
-            self.ffi.NULL, b"base"
-        )
-        _openssl_assert(self._base_provider != self.ffi.NULL)
-        self.lib._fips_provider = self.lib.OSSL_PROVIDER_load(
-            self.ffi.NULL, b"fips"
-        )
-        _openssl_assert(self.lib._fips_provider != self.ffi.NULL)
-
-        res = self.lib.EVP_default_properties_enable_fips(self.ffi.NULL, 1)
-        _openssl_assert(res == 1)
 
     @classmethod
     def _ensure_ffi_initialized(cls) -> None:
@@ -117,9 +97,8 @@ def _verify_package_version(version: str) -> None:
             "shared object. This can happen if you have multiple copies of "
             "cryptography installed in your Python path. Please try creating "
             "a new virtual environment to resolve this issue. "
-            "Loaded python version: {}, shared object version: {}".format(
-                version, so_package_version
-            )
+            f"Loaded python version: {version}, "
+            f"shared object version: {so_package_version}"
         )
 
     _openssl_assert(
@@ -140,5 +119,19 @@ if (
         "Operating System. Cryptography will be significantly faster if you "
         "switch to using a 64-bit Python.",
         UserWarning,
+        stacklevel=2,
+    )
+
+if (
+    not openssl.CRYPTOGRAPHY_IS_LIBRESSL
+    and not openssl.CRYPTOGRAPHY_IS_BORINGSSL
+    and not openssl.CRYPTOGRAPHY_IS_AWSLC
+    and not openssl.CRYPTOGRAPHY_OPENSSL_300_OR_GREATER
+):
+    warnings.warn(
+        "You are using OpenSSL < 3.0. Support for OpenSSL < 3.0 is deprecated "
+        "and will be removed in the next release. Please upgrade to OpenSSL "
+        "3.0 or later.",
+        CryptographyDeprecationWarning,
         stacklevel=2,
     )

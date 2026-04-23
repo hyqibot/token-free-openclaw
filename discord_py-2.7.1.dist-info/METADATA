@@ -1,0 +1,208 @@
+Metadata-Version: 2.4
+Name: discord.py
+Version: 2.7.1
+Summary: A Python wrapper for the Discord API
+Author: Rapptz
+License: The MIT License (MIT)
+        
+        Copyright (c) 2015-present Rapptz
+        
+        Permission is hereby granted, free of charge, to any person obtaining a
+        copy of this software and associated documentation files (the "Software"),
+        to deal in the Software without restriction, including without limitation
+        the rights to use, copy, modify, merge, publish, distribute, sublicense,
+        and/or sell copies of the Software, and to permit persons to whom the
+        Software is furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in
+        all copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+        OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+        FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+        DEALINGS IN THE SOFTWARE.
+        
+Project-URL: Documentation, https://discordpy.readthedocs.io/en/latest/
+Project-URL: Issue tracker, https://github.com/Rapptz/discord.py/issues
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Utilities
+Classifier: Typing :: Typed
+Requires-Python: >=3.8
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: aiohttp<4,>=3.7.4
+Requires-Dist: audioop-lts; python_version >= "3.13"
+Provides-Extra: voice
+Requires-Dist: PyNaCl<1.6,>=1.5.0; extra == "voice"
+Requires-Dist: davey>=0.1.0; extra == "voice"
+Provides-Extra: docs
+Requires-Dist: sphinx==4.4.0; extra == "docs"
+Requires-Dist: sphinxcontrib_trio==1.1.2; extra == "docs"
+Requires-Dist: sphinxcontrib-websupport==1.2.4; extra == "docs"
+Requires-Dist: sphinxcontrib-applehelp==1.0.4; extra == "docs"
+Requires-Dist: sphinxcontrib-devhelp==1.0.2; extra == "docs"
+Requires-Dist: sphinxcontrib-htmlhelp==2.0.1; extra == "docs"
+Requires-Dist: sphinxcontrib-jsmath==1.0.1; extra == "docs"
+Requires-Dist: sphinxcontrib-qthelp==1.0.3; extra == "docs"
+Requires-Dist: sphinxcontrib-serializinghtml==1.1.5; extra == "docs"
+Requires-Dist: typing-extensions<5,>=4.3; extra == "docs"
+Requires-Dist: sphinx-inline-tabs==2023.4.21; extra == "docs"
+Requires-Dist: imghdr-lts==1.0.0; python_version >= "3.13" and extra == "docs"
+Provides-Extra: speed
+Requires-Dist: orjson>=3.5.4; extra == "speed"
+Requires-Dist: aiodns>=1.1; sys_platform != "win32" and extra == "speed"
+Requires-Dist: Brotli; extra == "speed"
+Requires-Dist: cchardet==2.1.7; python_version < "3.10" and extra == "speed"
+Requires-Dist: zstandard>=0.23.0; python_version <= "3.13" and extra == "speed"
+Provides-Extra: test
+Requires-Dist: coverage[toml]; extra == "test"
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: pytest-asyncio; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: pytest-mock; extra == "test"
+Requires-Dist: typing-extensions<5,>=4.3; extra == "test"
+Requires-Dist: tzdata; sys_platform == "win32" and extra == "test"
+Provides-Extra: dev
+Requires-Dist: ruff==0.12; extra == "dev"
+Requires-Dist: typing_extensions<5,>=4.3; extra == "dev"
+Dynamic: license-file
+
+discord.py
+==========
+
+.. image:: https://discord.com/api/guilds/336642139381301249/embed.png
+   :target: https://discord.gg/r3sSKJJ
+   :alt: Discord server invite
+.. image:: https://img.shields.io/pypi/v/discord.py.svg
+   :target: https://pypi.python.org/pypi/discord.py
+   :alt: PyPI version info
+.. image:: https://img.shields.io/pypi/pyversions/discord.py.svg
+   :target: https://pypi.python.org/pypi/discord.py
+   :alt: PyPI supported Python versions
+
+A modern, easy to use, feature-rich, and async ready API wrapper for Discord written in Python.
+
+Key Features
+-------------
+
+- Modern Pythonic API using ``async`` and ``await``.
+- Proper rate limit handling.
+- Optimised in both speed and memory.
+
+Installing
+----------
+
+**Python 3.8 or higher is required**
+
+To install the library without full voice support, you can just run the following command:
+
+.. note::
+
+    A `Virtual Environment <https://docs.python.org/3/library/venv.html>`__ is recommended to install
+    the library, especially on Linux where the system Python is externally managed and restricts which
+    packages you can install on it.
+
+
+.. code:: sh
+
+    # Linux/macOS
+    python3 -m pip install -U discord.py
+
+    # Windows
+    py -3 -m pip install -U discord.py
+
+Otherwise to get voice support you should run the following command:
+
+.. code:: sh
+
+    # Linux/macOS
+    python3 -m pip install -U "discord.py[voice]"
+
+    # Windows
+    py -3 -m pip install -U discord.py[voice]
+
+
+To install the development version, do the following:
+
+.. code:: sh
+
+    $ git clone https://github.com/Rapptz/discord.py
+    $ cd discord.py
+    $ python3 -m pip install -U .[voice]
+
+
+Optional Packages
+~~~~~~~~~~~~~~~~~~
+
+* `PyNaCl <https://pypi.org/project/PyNaCl/>`__ (for voice support)
+
+Please note that when installing voice support on Linux, you must install the following packages via your favourite package manager (e.g. ``apt``, ``dnf``, etc) before running the above commands:
+
+* libffi-dev (or ``libffi-devel`` on some systems)
+* python-dev (e.g. ``python3.8-dev`` for Python 3.8)
+
+Quick Example
+--------------
+
+.. code:: py
+
+    import discord
+
+    class MyClient(discord.Client):
+        async def on_ready(self):
+            print('Logged on as', self.user)
+
+        async def on_message(self, message):
+            # don't respond to ourselves
+            if message.author == self.user:
+                return
+
+            if message.content == 'ping':
+                await message.channel.send('pong')
+
+    intents = discord.Intents.default()
+    intents.message_content = True
+    client = MyClient(intents=intents)
+    client.run('token')
+
+Bot Example
+~~~~~~~~~~~~~
+
+.. code:: py
+
+    import discord
+    from discord.ext import commands
+
+    intents = discord.Intents.default()
+    intents.message_content = True
+    bot = commands.Bot(command_prefix='>', intents=intents)
+
+    @bot.command()
+    async def ping(ctx):
+        await ctx.send('pong')
+
+    bot.run('token')
+
+You can find more examples in the examples directory.
+
+Links
+------
+
+- `Documentation <https://discordpy.readthedocs.io/en/latest/index.html>`_
+- `Official Discord Server <https://discord.gg/r3sSKJJ>`_
+- `Discord API <https://discord.gg/discord-api>`_

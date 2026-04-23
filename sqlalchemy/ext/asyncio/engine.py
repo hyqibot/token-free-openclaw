@@ -1,5 +1,5 @@
 # ext/asyncio/engine.py
-# Copyright (C) 2020-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2020-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -186,7 +186,8 @@ class AsyncConnectable:
         "default_isolation_level",
     ],
 )
-class AsyncConnection(
+# "Class has incompatible disjoint bases" - no idea
+class AsyncConnection(  # type:ignore[misc]
     ProxyComparable[Connection],
     StartableContext["AsyncConnection"],
     AsyncConnectable,
@@ -198,6 +199,7 @@ class AsyncConnection(
     method of :class:`_asyncio.AsyncEngine`::
 
         from sqlalchemy.ext.asyncio import create_async_engine
+
         engine = create_async_engine("postgresql+asyncpg://user:pass@host/dbname")
 
         async with engine.connect() as conn:
@@ -254,7 +256,7 @@ class AsyncConnection(
 
     @classmethod
     def _regenerate_proxy_for_target(
-        cls, target: Connection
+        cls, target: Connection, **additional_kw: Any  # noqa: U100
     ) -> AsyncConnection:
         return AsyncConnection(
             AsyncEngine._retrieve_proxy_for_target(target.engine), target
@@ -544,7 +546,7 @@ class AsyncConnection(
 
         E.g.::
 
-            result = await conn.stream(stmt):
+            result = await conn.stream(stmt)
             async for row in result:
                 print(f"{row}")
 
@@ -575,7 +577,7 @@ class AsyncConnection(
         """
         if not self.dialect.supports_server_side_cursors:
             raise exc.InvalidRequestError(
-                "Cant use `stream` or `stream_scalars` with the current "
+                "Can't use `stream` or `stream_scalars` with the current "
                 "dialect since it does not support server side cursors."
             )
 
@@ -821,7 +823,7 @@ class AsyncConnection(
         *arg: _P.args,
         **kw: _P.kwargs,
     ) -> _T:
-        """Invoke the given synchronous (i.e. not async) callable,
+        '''Invoke the given synchronous (i.e. not async) callable,
         passing a synchronous-style :class:`_engine.Connection` as the first
         argument.
 
@@ -831,26 +833,26 @@ class AsyncConnection(
         E.g.::
 
             def do_something_with_core(conn: Connection, arg1: int, arg2: str) -> str:
-                '''A synchronous function that does not require awaiting
+                """A synchronous function that does not require awaiting
 
                 :param conn: a Core SQLAlchemy Connection, used synchronously
 
                 :return: an optional return value is supported
 
-                '''
-                conn.execute(
-                    some_table.insert().values(int_col=arg1, str_col=arg2)
-                )
+                """
+                conn.execute(some_table.insert().values(int_col=arg1, str_col=arg2))
                 return "success"
 
 
             async def do_something_async(async_engine: AsyncEngine) -> None:
-                '''an async function that uses awaiting'''
+                """an async function that uses awaiting"""
 
                 async with async_engine.begin() as async_conn:
                     # run do_something_with_core() with a sync-style
                     # Connection, proxied into an awaitable
-                    return_code = await async_conn.run_sync(do_something_with_core, 5, "strval")
+                    return_code = await async_conn.run_sync(
+                        do_something_with_core, 5, "strval"
+                    )
                     print(return_code)
 
         This method maintains the asyncio event loop all the way through
@@ -881,7 +883,7 @@ class AsyncConnection(
 
             :ref:`session_run_sync`
 
-        """  # noqa: E501
+        '''  # noqa: E501
 
         return await greenlet_spawn(
             fn, self._proxied, *arg, _require_await=False, **kw
@@ -993,13 +995,15 @@ class AsyncConnection(
     ],
     attributes=["url", "pool", "dialect", "engine", "name", "driver", "echo"],
 )
-class AsyncEngine(ProxyComparable[Engine], AsyncConnectable):
+# "Class has incompatible disjoint bases" - no idea
+class AsyncEngine(ProxyComparable[Engine], AsyncConnectable):  # type: ignore[misc]  # noqa:E501
     """An asyncio proxy for a :class:`_engine.Engine`.
 
     :class:`_asyncio.AsyncEngine` is acquired using the
     :func:`_asyncio.create_async_engine` function::
 
         from sqlalchemy.ext.asyncio import create_async_engine
+
         engine = create_async_engine("postgresql+asyncpg://user:pass@host/dbname")
 
     .. versionadded:: 1.4
@@ -1039,7 +1043,9 @@ class AsyncEngine(ProxyComparable[Engine], AsyncConnectable):
         return self.sync_engine
 
     @classmethod
-    def _regenerate_proxy_for_target(cls, target: Engine) -> AsyncEngine:
+    def _regenerate_proxy_for_target(
+        cls, target: Engine, **additional_kw: Any  # noqa: U100
+    ) -> AsyncEngine:
         return AsyncEngine(target)
 
     @contextlib.asynccontextmanager
@@ -1055,7 +1061,6 @@ class AsyncEngine(ProxyComparable[Engine], AsyncConnectable):
                     text("insert into table (x, y, z) values (1, 2, 3)")
                 )
                 await conn.execute(text("my_special_procedure(5)"))
-
 
         """
         conn = self.connect()
@@ -1343,7 +1348,7 @@ class AsyncTransaction(
 
     @classmethod
     def _regenerate_proxy_for_target(
-        cls, target: Transaction
+        cls, target: Transaction, **additional_kw: Any  # noqa: U100
     ) -> AsyncTransaction:
         sync_connection = target.connection
         sync_transaction = target
@@ -1428,7 +1433,7 @@ def _get_sync_engine_or_connection(
 
 
 def _get_sync_engine_or_connection(
-    async_engine: Union[AsyncEngine, AsyncConnection]
+    async_engine: Union[AsyncEngine, AsyncConnection],
 ) -> Union[Engine, Connection]:
     if isinstance(async_engine, AsyncConnection):
         return async_engine._proxied

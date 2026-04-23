@@ -10,11 +10,16 @@ import email.message
 import email.policy
 import io
 import typing
+from collections.abc import Iterable
 
 from cryptography import utils, x509
+from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
 from cryptography.hazmat.bindings._rust import pkcs7 as rust_pkcs7
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+from cryptography.hazmat.primitives.ciphers import (
+    algorithms,
+)
 from cryptography.utils import _check_byteslike
 
 load_pem_pkcs7_certificates = rust_pkcs7.load_pem_pkcs7_certificates
@@ -34,6 +39,10 @@ PKCS7PrivateKeyTypes = typing.Union[
     rsa.RSAPrivateKey, ec.EllipticCurvePrivateKey
 ]
 
+ContentEncryptionAlgorithm = typing.Union[
+    typing.Type[algorithms.AES128], typing.Type[algorithms.AES256]
+]
+
 
 class PKCS7Options(utils.Enum):
     Text = "Add text/plain MIME type"
@@ -47,7 +56,7 @@ class PKCS7Options(utils.Enum):
 class PKCS7SignatureBuilder:
     def __init__(
         self,
-        data: bytes | None = None,
+        data: utils.Buffer | None = None,
         signers: list[
             tuple[
                 x509.Certificate,
@@ -62,7 +71,7 @@ class PKCS7SignatureBuilder:
         self._signers = signers
         self._additional_certs = additional_certs
 
-    def set_data(self, data: bytes) -> PKCS7SignatureBuilder:
+    def set_data(self, data: utils.Buffer) -> PKCS7SignatureBuilder:
         _check_byteslike("data", data)
         if self._data is not None:
             raise ValueError("data may only be set once")
@@ -125,7 +134,7 @@ class PKCS7SignatureBuilder:
     def sign(
         self,
         encoding: serialization.Encoding,
-        options: typing.Iterable[PKCS7Options],
+        options: Iterable[PKCS7Options],
         backend: typing.Any = None,
     ) -> bytes:
         if len(self._signers) == 0:
@@ -177,7 +186,131 @@ class PKCS7SignatureBuilder:
         return rust_pkcs7.sign_and_serialize(self, encoding, options)
 
 
-def _smime_encode(
+class PKCS7EnvelopeBuilder:
+    def __init__(
+        self,
+        *,
+        _data: bytes | None = None,
+        _recipients: list[x509.Certificate] | None = None,
+        _content_encryption_algorithm: ContentEncryptionAlgorithm
+        | None = None,
+    ):
+        from cryptography.hazmat.backends.openssl.backend import (
+            backend as ossl,
+        )
+
+        if not ossl.rsa_encryption_supported(padding=padding.PKCS1v15()):
+            raise UnsupportedAlgorithm(
+                "RSA with PKCS1 v1.5 padding is not supported by this version"
+                " of OpenSSL.",
+                _Reasons.UNSUPPORTED_PADDING,
+            )
+        self._data = _data
+        self._recipients = _recipients if _recipients is not None else []
+        self._content_encryption_algorithm = _content_encryption_algorithm
+
+    def set_data(self, data: bytes) -> PKCS7EnvelopeBuilder:
+        _check_byteslike("data", data)
+        if self._data is not None:
+            raise ValueError("data may only be set once")
+
+        return PKCS7EnvelopeBuilder(
+            _data=data,
+            _recipients=self._recipients,
+            _content_encryption_algorithm=self._content_encryption_algorithm,
+        )
+
+    def add_recipient(
+        self,
+        certificate: x509.Certificate,
+    ) -> PKCS7EnvelopeBuilder:
+        if not isinstance(certificate, x509.Certificate):
+            raise TypeError("certificate must be a x509.Certificate")
+
+        if not isinstance(certificate.public_key(), rsa.RSAPublicKey):
+            raise TypeError("Only RSA keys are supported at this time.")
+
+        return PKCS7EnvelopeBuilder(
+            _data=self._data,
+            _recipients=[
+                *self._recipients,
+                certificate,
+            ],
+            _content_encryption_algorithm=self._content_encryption_algorithm,
+        )
+
+    def set_content_encryption_algorithm(
+        self, content_encryption_algorithm: ContentEncryptionAlgorithm
+    ) -> PKCS7EnvelopeBuilder:
+        if self._content_encryption_algorithm is not None:
+            raise ValueError("Content encryption algo may only be set once")
+        if content_encryption_algorithm not in {
+            algorithms.AES128,
+            algorithms.AES256,
+        }:
+            raise TypeError("Only AES128 and AES256 are supported")
+
+        return PKCS7EnvelopeBuilder(
+            _data=self._data,
+            _recipients=self._recipients,
+            _content_encryption_algorithm=content_encryption_algorithm,
+        )
+
+    def encrypt(
+        self,
+        encoding: serialization.Encoding,
+        options: Iterable[PKCS7Options],
+    ) -> bytes:
+        if len(self._recipients) == 0:
+            raise ValueError("Must have at least one recipient")
+        if self._data is None:
+            raise ValueError("You must add data to encrypt")
+
+        # The default content encryption algorithm is AES-128, which the S/MIME
+        # v3.2 RFC specifies as MUST support (https://datatracker.ietf.org/doc/html/rfc5751#section-2.7)
+        content_encryption_algorithm = (
+            self._content_encryption_algorithm or algorithms.AES128
+        )
+
+        options = list(options)
+        if not all(isinstance(x, PKCS7Options) for x in options):
+            raise ValueError("options must be from the PKCS7Options enum")
+        if encoding not in (
+            serialization.Encoding.PEM,
+            serialization.Encoding.DER,
+            serialization.Encoding.SMIME,
+        ):
+            raise ValueError(
+                "Must be PEM, DER, or SMIME from the Encoding enum"
+            )
+
+        # Only allow options that make sense for encryption
+        if any(
+            opt not in [PKCS7Options.Text, PKCS7Options.Binary]
+            for opt in options
+        ):
+            raise ValueError(
+                "Only the following options are supported for encryption: "
+                "Text, Binary"
+            )
+        elif PKCS7Options.Text in options and PKCS7Options.Binary in options:
+            # OpenSSL accepts both options at the same time, but ignores Text.
+            # We fail defensively to avoid unexpected outputs.
+            raise ValueError(
+                "Cannot use Binary and Text options at the same time"
+            )
+
+        return rust_pkcs7.encrypt_and_serialize(
+            self, content_encryption_algorithm, encoding, options
+        )
+
+
+pkcs7_decrypt_der = rust_pkcs7.decrypt_der
+pkcs7_decrypt_pem = rust_pkcs7.decrypt_pem
+pkcs7_decrypt_smime = rust_pkcs7.decrypt_smime
+
+
+def _smime_signed_encode(
     data: bytes, signature: bytes, micalg: str, text_mode: bool
 ) -> bytes:
     # This function works pretty hard to replicate what OpenSSL does
@@ -223,6 +356,51 @@ def _smime_encode(
     )
     g.flatten(m)
     return fp.getvalue()
+
+
+def _smime_enveloped_encode(data: bytes) -> bytes:
+    m = email.message.Message()
+    m.add_header("MIME-Version", "1.0")
+    m.add_header("Content-Disposition", "attachment", filename="smime.p7m")
+    m.add_header(
+        "Content-Type",
+        "application/pkcs7-mime",
+        smime_type="enveloped-data",
+        name="smime.p7m",
+    )
+    m.add_header("Content-Transfer-Encoding", "base64")
+
+    m.set_payload(email.base64mime.body_encode(data, maxlinelen=65))
+
+    return m.as_bytes(policy=m.policy.clone(linesep="\n", max_line_length=0))
+
+
+def _smime_enveloped_decode(data: bytes) -> bytes:
+    m = email.message_from_bytes(data)
+    if m.get_content_type() not in {
+        "application/x-pkcs7-mime",
+        "application/pkcs7-mime",
+    }:
+        raise ValueError("Not an S/MIME enveloped message")
+    return bytes(m.get_payload(decode=True))
+
+
+def _smime_remove_text_headers(data: bytes) -> bytes:
+    m = email.message_from_bytes(data)
+    # Using get() instead of get_content_type() since it has None as default,
+    # where the latter has "text/plain". Both methods are case-insensitive.
+    content_type = m.get("content-type")
+    if content_type is None:
+        raise ValueError(
+            "Decrypted MIME data has no 'Content-Type' header. "
+            "Please remove the 'Text' option to parse it manually."
+        )
+    if "text/plain" not in content_type:
+        raise ValueError(
+            f"Decrypted MIME data content type is '{content_type}', not "
+            "'text/plain'. Remove the 'Text' option to parse it manually."
+        )
+    return bytes(m.get_payload(decode=True))
 
 
 class OpenSSLMimePart(email.message.MIMEPart):

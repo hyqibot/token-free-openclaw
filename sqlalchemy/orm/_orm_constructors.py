@@ -1,5 +1,5 @@
 # orm/_orm_constructors.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -12,6 +12,7 @@ from typing import Any
 from typing import Callable
 from typing import Collection
 from typing import Iterable
+from typing import Mapping
 from typing import NoReturn
 from typing import Optional
 from typing import overload
@@ -70,7 +71,7 @@ if TYPE_CHECKING:
     from ..sql._typing import _TypeEngineArgument
     from ..sql.elements import ColumnElement
     from ..sql.schema import _ServerDefaultArgument
-    from ..sql.schema import FetchedValue
+    from ..sql.schema import _ServerOnUpdateArgument
     from ..sql.selectable import Alias
     from ..sql.selectable import Subquery
 
@@ -108,6 +109,7 @@ def mapped_column(
     default_factory: Union[_NoArg, Callable[[], _T]] = _NoArg.NO_ARG,
     compare: Union[_NoArg, bool] = _NoArg.NO_ARG,
     kw_only: Union[_NoArg, bool] = _NoArg.NO_ARG,
+    hash: Union[_NoArg, bool, None] = _NoArg.NO_ARG,  # noqa: A002
     nullable: Optional[
         Union[bool, Literal[SchemaConst.NULL_UNSPECIFIED]]
     ] = SchemaConst.NULL_UNSPECIFIED,
@@ -127,12 +129,13 @@ def mapped_column(
     onupdate: Optional[Any] = None,
     insert_default: Optional[Any] = _NoArg.NO_ARG,
     server_default: Optional[_ServerDefaultArgument] = None,
-    server_onupdate: Optional[FetchedValue] = None,
+    server_onupdate: Optional[_ServerOnUpdateArgument] = None,
     active_history: bool = False,
     quote: Optional[bool] = None,
     system: bool = False,
     comment: Optional[str] = None,
     sort_order: Union[_NoArg, int] = _NoArg.NO_ARG,
+    dataclass_metadata: Union[_NoArg, Mapping[Any, Any], None] = _NoArg.NO_ARG,
     **kw: Any,
 ) -> MappedColumn[Any]:
     r"""declare a new ORM-mapped :class:`_schema.Column` construct
@@ -186,9 +189,9 @@ def mapped_column(
      :class:`_schema.Column`.
     :param nullable: Optional bool, whether the column should be "NULL" or
      "NOT NULL". If omitted, the nullability is derived from the type
-     annotation based on whether or not ``typing.Optional`` is present.
-     ``nullable`` defaults to ``True`` otherwise for non-primary key columns,
-     and ``False`` for primary key columns.
+     annotation based on whether or not ``typing.Optional`` (or its equivalent)
+     is present.  ``nullable`` defaults to ``True`` otherwise for non-primary
+     key columns, and ``False`` for primary key columns.
     :param primary_key: optional bool, indicates the :class:`_schema.Column`
      would be part of the table's primary key or not.
     :param deferred: Optional bool - this keyword argument is consumed by the
@@ -331,6 +334,19 @@ def mapped_column(
      :ref:`orm_declarative_native_dataclasses`, indicates if this field
      should be marked as keyword-only when generating the ``__init__()``.
 
+    :param hash: Specific to
+     :ref:`orm_declarative_native_dataclasses`, controls if this field
+     is included when generating the ``__hash__()`` method for the mapped
+     class.
+
+     .. versionadded:: 2.0.36
+
+    :param dataclass_metadata: Specific to
+     :ref:`orm_declarative_native_dataclasses`, supplies metadata
+     to be attached to the generated dataclass field.
+
+     .. versionadded:: 2.0.42
+
     :param \**kw: All remaining keyword arguments are passed through to the
      constructor for the :class:`_schema.Column`.
 
@@ -345,7 +361,14 @@ def mapped_column(
         autoincrement=autoincrement,
         insert_default=insert_default,
         attribute_options=_AttributeOptions(
-            init, repr, default, default_factory, compare, kw_only
+            init,
+            repr,
+            default,
+            default_factory,
+            compare,
+            kw_only,
+            hash,
+            dataclass_metadata,
         ),
         doc=doc,
         key=key,
@@ -440,16 +463,18 @@ def column_property(
     deferred: bool = False,
     raiseload: bool = False,
     comparator_factory: Optional[Type[PropComparator[_T]]] = None,
-    init: Union[_NoArg, bool] = _NoArg.NO_ARG,  # noqa: A002
+    init: Union[_NoArg, bool] = _NoArg.NO_ARG,
     repr: Union[_NoArg, bool] = _NoArg.NO_ARG,  # noqa: A002
     default: Optional[Any] = _NoArg.NO_ARG,
     default_factory: Union[_NoArg, Callable[[], _T]] = _NoArg.NO_ARG,
     compare: Union[_NoArg, bool] = _NoArg.NO_ARG,
     kw_only: Union[_NoArg, bool] = _NoArg.NO_ARG,
+    hash: Union[_NoArg, bool, None] = _NoArg.NO_ARG,  # noqa: A002
     active_history: bool = False,
     expire_on_flush: bool = True,
     info: Optional[_InfoType] = None,
     doc: Optional[str] = None,
+    dataclass_metadata: Union[_NoArg, Mapping[Any, Any], None] = _NoArg.NO_ARG,
 ) -> MappedSQLExpression[_T]:
     r"""Provide a column-level property for use with a mapping.
 
@@ -534,13 +559,49 @@ def column_property(
 
             :ref:`orm_queryguide_deferred_raiseload`
 
-    :param init:
+    :param init: Specific to :ref:`orm_declarative_native_dataclasses`,
+     specifies if the mapped attribute should be part of the ``__init__()``
+     method as generated by the dataclass process.
+    :param repr: Specific to :ref:`orm_declarative_native_dataclasses`,
+     specifies if the mapped attribute should be part of the ``__repr__()``
+     method as generated by the dataclass process.
+    :param default_factory: Specific to
+     :ref:`orm_declarative_native_dataclasses`,
+     specifies a default-value generation function that will take place
+     as part of the ``__init__()``
+     method as generated by the dataclass process.
 
-    :param default:
+     .. seealso::
 
-    :param default_factory:
+        :ref:`defaults_default_factory_insert_default`
 
-    :param kw_only:
+        :paramref:`_orm.mapped_column.default`
+
+        :paramref:`_orm.mapped_column.insert_default`
+
+    :param compare: Specific to
+     :ref:`orm_declarative_native_dataclasses`, indicates if this field
+     should be included in comparison operations when generating the
+     ``__eq__()`` and ``__ne__()`` methods for the mapped class.
+
+     .. versionadded:: 2.0.0b4
+
+    :param kw_only: Specific to
+     :ref:`orm_declarative_native_dataclasses`, indicates if this field
+     should be marked as keyword-only when generating the ``__init__()``.
+
+    :param hash: Specific to
+     :ref:`orm_declarative_native_dataclasses`, controls if this field
+     is included when generating the ``__hash__()`` method for the mapped
+     class.
+
+     .. versionadded:: 2.0.36
+
+    :param dataclass_metadata: Specific to
+     :ref:`orm_declarative_native_dataclasses`, supplies metadata
+     to be attached to the generated dataclass field.
+
+     .. versionadded:: 2.0.42
 
     """
     return MappedSQLExpression(
@@ -553,6 +614,8 @@ def column_property(
             default_factory,
             compare,
             kw_only,
+            hash,
+            dataclass_metadata,
         ),
         group=group,
         deferred=deferred,
@@ -581,8 +644,10 @@ def composite(
     default_factory: Union[_NoArg, Callable[[], _T]] = _NoArg.NO_ARG,
     compare: Union[_NoArg, bool] = _NoArg.NO_ARG,
     kw_only: Union[_NoArg, bool] = _NoArg.NO_ARG,
+    hash: Union[_NoArg, bool, None] = _NoArg.NO_ARG,  # noqa: A002
     info: Optional[_InfoType] = None,
     doc: Optional[str] = None,
+    dataclass_metadata: Union[_NoArg, Mapping[Any, Any], None] = _NoArg.NO_ARG,
     **__kw: Any,
 ) -> Composite[Any]: ...
 
@@ -602,6 +667,7 @@ def composite(
     default_factory: Union[_NoArg, Callable[[], _T]] = _NoArg.NO_ARG,
     compare: Union[_NoArg, bool] = _NoArg.NO_ARG,
     kw_only: Union[_NoArg, bool] = _NoArg.NO_ARG,
+    hash: Union[_NoArg, bool, None] = _NoArg.NO_ARG,  # noqa: A002
     info: Optional[_InfoType] = None,
     doc: Optional[str] = None,
     **__kw: Any,
@@ -623,6 +689,7 @@ def composite(
     default_factory: Union[_NoArg, Callable[[], _T]] = _NoArg.NO_ARG,
     compare: Union[_NoArg, bool] = _NoArg.NO_ARG,
     kw_only: Union[_NoArg, bool] = _NoArg.NO_ARG,
+    hash: Union[_NoArg, bool, None] = _NoArg.NO_ARG,  # noqa: A002
     info: Optional[_InfoType] = None,
     doc: Optional[str] = None,
     **__kw: Any,
@@ -645,8 +712,10 @@ def composite(
     default_factory: Union[_NoArg, Callable[[], _T]] = _NoArg.NO_ARG,
     compare: Union[_NoArg, bool] = _NoArg.NO_ARG,
     kw_only: Union[_NoArg, bool] = _NoArg.NO_ARG,
+    hash: Union[_NoArg, bool, None] = _NoArg.NO_ARG,  # noqa: A002
     info: Optional[_InfoType] = None,
     doc: Optional[str] = None,
+    dataclass_metadata: Union[_NoArg, Mapping[Any, Any], None] = _NoArg.NO_ARG,
     **__kw: Any,
 ) -> Composite[Any]:
     r"""Return a composite column-based property for use with a Mapper.
@@ -719,6 +788,19 @@ def composite(
      :ref:`orm_declarative_native_dataclasses`, indicates if this field
      should be marked as keyword-only when generating the ``__init__()``.
 
+    :param hash: Specific to
+     :ref:`orm_declarative_native_dataclasses`, controls if this field
+     is included when generating the ``__hash__()`` method for the mapped
+     class.
+
+     .. versionadded:: 2.0.36
+
+    :param dataclass_metadata: Specific to
+     :ref:`orm_declarative_native_dataclasses`, supplies metadata
+     to be attached to the generated dataclass field.
+
+     .. versionadded:: 2.0.42
+
     """
     if __kw:
         raise _no_kw()
@@ -727,7 +809,14 @@ def composite(
         _class_or_attr,
         *attrs,
         attribute_options=_AttributeOptions(
-            init, repr, default, default_factory, compare, kw_only
+            init,
+            repr,
+            default,
+            default_factory,
+            compare,
+            kw_only,
+            hash,
+            dataclass_metadata,
         ),
         group=group,
         deferred=deferred,
@@ -773,7 +862,7 @@ def with_loader_criteria(
 
         stmt = select(User).options(
             selectinload(User.addresses),
-            with_loader_criteria(Address, Address.email_address != 'foo'))
+            with_loader_criteria(Address, Address.email_address != "foo"),
         )
 
     Above, the "selectinload" for ``User.addresses`` will apply the
@@ -783,8 +872,10 @@ def with_loader_criteria(
     ON clause of the join, in this example using :term:`1.x style`
     queries::
 
-        q = session.query(User).outerjoin(User.addresses).options(
-            with_loader_criteria(Address, Address.email_address != 'foo'))
+        q = (
+            session.query(User)
+            .outerjoin(User.addresses)
+            .options(with_loader_criteria(Address, Address.email_address != "foo"))
         )
 
     The primary purpose of :func:`_orm.with_loader_criteria` is to use
@@ -797,6 +888,7 @@ def with_loader_criteria(
 
         session = Session(bind=engine)
 
+
         @event.listens_for("do_orm_execute", session)
         def _add_filtering_criteria(execute_state):
 
@@ -808,8 +900,8 @@ def with_loader_criteria(
                 execute_state.statement = execute_state.statement.options(
                     with_loader_criteria(
                         SecurityRole,
-                        lambda cls: cls.role.in_(['some_role']),
-                        include_aliases=True
+                        lambda cls: cls.role.in_(["some_role"]),
+                        include_aliases=True,
                     )
                 )
 
@@ -846,16 +938,19 @@ def with_loader_criteria(
        ``A -> A.bs -> B``, the given :func:`_orm.with_loader_criteria`
        option will affect the way in which the JOIN is rendered::
 
-            stmt = select(A).join(A.bs).options(
-                contains_eager(A.bs),
-                with_loader_criteria(B, B.flag == 1)
+            stmt = (
+                select(A)
+                .join(A.bs)
+                .options(contains_eager(A.bs), with_loader_criteria(B, B.flag == 1))
             )
 
        Above, the given :func:`_orm.with_loader_criteria` option will
        affect the ON clause of the JOIN that is specified by
        ``.join(A.bs)``, so is applied as expected. The
        :func:`_orm.contains_eager` option has the effect that columns from
-       ``B`` are added to the columns clause::
+       ``B`` are added to the columns clause:
+
+       .. sourcecode:: sql
 
             SELECT
                 b.id, b.a_id, b.data, b.flag,
@@ -921,7 +1016,7 @@ def with_loader_criteria(
 
      .. versionadded:: 1.4.0b2
 
-    """
+    """  # noqa: E501
     return LoaderCriteriaOption(
         entity_or_base,
         where_criteria,
@@ -955,6 +1050,7 @@ def relationship(
     default_factory: Union[_NoArg, Callable[[], _T]] = _NoArg.NO_ARG,
     compare: Union[_NoArg, bool] = _NoArg.NO_ARG,
     kw_only: Union[_NoArg, bool] = _NoArg.NO_ARG,
+    hash: Union[_NoArg, bool, None] = _NoArg.NO_ARG,  # noqa: A002
     lazy: _LazyLoadArgumentType = "select",
     passive_deletes: Union[Literal["all"], bool] = False,
     passive_updates: bool = True,
@@ -974,6 +1070,7 @@ def relationship(
     info: Optional[_InfoType] = None,
     omit_join: Literal[None, False] = None,
     sync_backref: Optional[bool] = None,
+    dataclass_metadata: Union[_NoArg, Mapping[Any, Any], None] = _NoArg.NO_ARG,
     **kw: Any,
 ) -> _RelationshipDeclared[Any]:
     """Provide a relationship between two mapped classes.
@@ -1778,6 +1875,18 @@ def relationship(
      :ref:`orm_declarative_native_dataclasses`, indicates if this field
      should be marked as keyword-only when generating the ``__init__()``.
 
+    :param hash: Specific to
+     :ref:`orm_declarative_native_dataclasses`, controls if this field
+     is included when generating the ``__hash__()`` method for the mapped
+     class.
+
+     .. versionadded:: 2.0.36
+
+    :param dataclass_metadata: Specific to
+     :ref:`orm_declarative_native_dataclasses`, supplies metadata
+     to be attached to the generated dataclass field.
+
+     .. versionadded:: 2.0.42
 
     """
 
@@ -1796,7 +1905,14 @@ def relationship(
         cascade=cascade,
         viewonly=viewonly,
         attribute_options=_AttributeOptions(
-            init, repr, default, default_factory, compare, kw_only
+            init,
+            repr,
+            default,
+            default_factory,
+            compare,
+            kw_only,
+            hash,
+            dataclass_metadata,
         ),
         lazy=lazy,
         passive_deletes=passive_deletes,
@@ -1831,8 +1947,10 @@ def synonym(
     default_factory: Union[_NoArg, Callable[[], _T]] = _NoArg.NO_ARG,
     compare: Union[_NoArg, bool] = _NoArg.NO_ARG,
     kw_only: Union[_NoArg, bool] = _NoArg.NO_ARG,
+    hash: Union[_NoArg, bool, None] = _NoArg.NO_ARG,  # noqa: A002
     info: Optional[_InfoType] = None,
     doc: Optional[str] = None,
+    dataclass_metadata: Union[_NoArg, Mapping[Any, Any], None] = _NoArg.NO_ARG,
 ) -> Synonym[Any]:
     """Denote an attribute name as a synonym to a mapped property,
     in that the attribute will mirror the value and expression behavior
@@ -1841,13 +1959,12 @@ def synonym(
     e.g.::
 
         class MyClass(Base):
-            __tablename__ = 'my_table'
+            __tablename__ = "my_table"
 
             id = Column(Integer, primary_key=True)
             job_status = Column(String(50))
 
             status = synonym("job_status")
-
 
     :param name: the name of the existing mapped property.  This
       can refer to the string name ORM-mapped attribute
@@ -1876,10 +1993,12 @@ def synonym(
       :paramref:`.synonym.descriptor` parameter::
 
         my_table = Table(
-            "my_table", metadata,
-            Column('id', Integer, primary_key=True),
-            Column('job_status', String(50))
+            "my_table",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("job_status", String(50)),
         )
+
 
         class MyClass:
             @property
@@ -1888,11 +2007,15 @@ def synonym(
 
 
         mapper(
-            MyClass, my_table, properties={
+            MyClass,
+            my_table,
+            properties={
                 "job_status": synonym(
-                    "_job_status", map_column=True,
-                    descriptor=MyClass._job_status_descriptor)
-            }
+                    "_job_status",
+                    map_column=True,
+                    descriptor=MyClass._job_status_descriptor,
+                )
+            },
         )
 
       Above, the attribute named ``_job_status`` is automatically
@@ -1941,7 +2064,14 @@ def synonym(
         descriptor=descriptor,
         comparator_factory=comparator_factory,
         attribute_options=_AttributeOptions(
-            init, repr, default, default_factory, compare, kw_only
+            init,
+            repr,
+            default,
+            default_factory,
+            compare,
+            kw_only,
+            hash,
+            dataclass_metadata,
         ),
         doc=doc,
         info=info,
@@ -2042,8 +2172,7 @@ def backref(name: str, **kwargs: Any) -> ORMBackrefArgument:
 
     E.g.::
 
-        'items':relationship(
-            SomeItem, backref=backref('parent', lazy='subquery'))
+        "items": relationship(SomeItem, backref=backref("parent", lazy="subquery"))
 
     The :paramref:`_orm.relationship.backref` parameter is generally
     considered to be legacy; for modern applications, using
@@ -2055,7 +2184,7 @@ def backref(name: str, **kwargs: Any) -> ORMBackrefArgument:
 
         :ref:`relationships_backref` - background on backrefs
 
-    """
+    """  # noqa: E501
 
     return (name, kwargs)
 
@@ -2072,10 +2201,12 @@ def deferred(
     default_factory: Union[_NoArg, Callable[[], _T]] = _NoArg.NO_ARG,
     compare: Union[_NoArg, bool] = _NoArg.NO_ARG,
     kw_only: Union[_NoArg, bool] = _NoArg.NO_ARG,
+    hash: Union[_NoArg, bool, None] = _NoArg.NO_ARG,  # noqa: A002
     active_history: bool = False,
     expire_on_flush: bool = True,
     info: Optional[_InfoType] = None,
     doc: Optional[str] = None,
+    dataclass_metadata: Union[_NoArg, Mapping[Any, Any], None] = _NoArg.NO_ARG,
 ) -> MappedSQLExpression[_T]:
     r"""Indicate a column-based mapped attribute that by default will
     not load unless accessed.
@@ -2106,7 +2237,14 @@ def deferred(
         column,
         *additional_columns,
         attribute_options=_AttributeOptions(
-            init, repr, default, default_factory, compare, kw_only
+            init,
+            repr,
+            default,
+            default_factory,
+            compare,
+            kw_only,
+            hash,
+            dataclass_metadata,
         ),
         group=group,
         deferred=True,
@@ -2149,6 +2287,8 @@ def query_expression(
             _NoArg.NO_ARG,
             compare,
             _NoArg.NO_ARG,
+            _NoArg.NO_ARG,
+            _NoArg.NO_ARG,
         ),
         expire_on_flush=expire_on_flush,
         info=info,
@@ -2177,7 +2317,7 @@ def clear_mappers() -> None:
     are never discarded independently of their class.  If a mapped class
     itself is garbage collected, its mapper is automatically disposed of as
     well. As such, :func:`.clear_mappers` is only for usage in test suites
-    that re-use the same classes with different mappings, which is itself an
+    that reuse the same classes with different mappings, which is itself an
     extremely rare use case - the only such use case is in fact SQLAlchemy's
     own test suite, and possibly the test suites of other ORM extension
     libraries which intend to test various combinations of mapper construction
@@ -2295,6 +2435,16 @@ def aliased(
      supported by all modern databases with regards to right-nested joins
      and generally produces more efficient queries.
 
+     When :paramref:`_orm.aliased.flat` is combined with
+     :paramref:`_orm.aliased.name`, the resulting joins will alias individual
+     tables using a naming scheme similar to ``<prefix>_<tablename>``.  This
+     naming scheme is for visibility / debugging purposes only and the
+     specific scheme is subject to change without notice.
+
+     .. versionadded:: 2.0.32 added support for combining
+        :paramref:`_orm.aliased.name` with :paramref:`_orm.aliased.flat`.
+        Previously, this would raise ``NotImplementedError``.
+
     :param adapt_on_names: if True, more liberal "matching" will be used when
      mapping the mapped columns of the ORM entity to those of the
      given selectable - a name-based match will be performed if the
@@ -2304,17 +2454,21 @@ def aliased(
      aggregate functions::
 
         class UnitPrice(Base):
-            __tablename__ = 'unit_price'
+            __tablename__ = "unit_price"
             ...
             unit_id = Column(Integer)
             price = Column(Numeric)
 
-        aggregated_unit_price = Session.query(
-                                    func.sum(UnitPrice.price).label('price')
-                                ).group_by(UnitPrice.unit_id).subquery()
 
-        aggregated_unit_price = aliased(UnitPrice,
-                    alias=aggregated_unit_price, adapt_on_names=True)
+        aggregated_unit_price = (
+            Session.query(func.sum(UnitPrice.price).label("price"))
+            .group_by(UnitPrice.unit_id)
+            .subquery()
+        )
+
+        aggregated_unit_price = aliased(
+            UnitPrice, alias=aggregated_unit_price, adapt_on_names=True
+        )
 
      Above, functions on ``aggregated_unit_price`` which refer to
      ``.price`` will return the
@@ -2460,16 +2614,21 @@ def join(
     :meth:`_sql.Select.select_from` method, as in::
 
         from sqlalchemy.orm import join
-        stmt = select(User).\
-            select_from(join(User, Address, User.addresses)).\
-            filter(Address.email_address=='foo@bar.com')
+
+        stmt = (
+            select(User)
+            .select_from(join(User, Address, User.addresses))
+            .filter(Address.email_address == "foo@bar.com")
+        )
 
     In modern SQLAlchemy the above join can be written more
     succinctly as::
 
-        stmt = select(User).\
-                join(User.addresses).\
-                filter(Address.email_address=='foo@bar.com')
+        stmt = (
+            select(User)
+            .join(User.addresses)
+            .filter(Address.email_address == "foo@bar.com")
+        )
 
     .. warning:: using :func:`_orm.join` directly may not work properly
        with modern ORM options such as :func:`_orm.with_loader_criteria`.

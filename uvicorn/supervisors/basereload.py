@@ -5,10 +5,10 @@ import os
 import signal
 import sys
 import threading
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from socket import socket
 from types import FrameType
-from typing import Callable, Iterator
 
 import click
 
@@ -89,6 +89,10 @@ class BaseReload:
             self.is_restarting = True
             assert self.process.pid is not None
             os.kill(self.process.pid, signal.CTRL_C_EVENT)
+
+            # This is a workaround to ensure the Ctrl+C event is processed
+            sys.stdout.write(" ")  # This has to be a non-empty string
+            sys.stdout.flush()
         else:  # pragma: py-win32
             self.process.terminate()
         self.process.join()

@@ -9,6 +9,7 @@ import abc
 from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
 from cryptography.hazmat.bindings._rust import openssl as rust_openssl
 from cryptography.hazmat.primitives import _serialization
+from cryptography.utils import Buffer
 
 
 class X25519PublicKey(metaclass=abc.ABCMeta):
@@ -47,6 +48,12 @@ class X25519PublicKey(metaclass=abc.ABCMeta):
         Checks equality.
         """
 
+    @abc.abstractmethod
+    def __copy__(self) -> X25519PublicKey:
+        """
+        Returns a copy.
+        """
+
 
 X25519PublicKey.register(rust_openssl.x25519.X25519PublicKey)
 
@@ -64,7 +71,7 @@ class X25519PrivateKey(metaclass=abc.ABCMeta):
         return rust_openssl.x25519.generate_key()
 
     @classmethod
-    def from_private_bytes(cls, data: bytes) -> X25519PrivateKey:
+    def from_private_bytes(cls, data: Buffer) -> X25519PrivateKey:
         from cryptography.hazmat.backends.openssl.backend import backend
 
         if not backend.x25519_supported():
@@ -103,6 +110,12 @@ class X25519PrivateKey(metaclass=abc.ABCMeta):
     def exchange(self, peer_public_key: X25519PublicKey) -> bytes:
         """
         Performs a key exchange operation using the provided peer's public key.
+        """
+
+    @abc.abstractmethod
+    def __copy__(self) -> X25519PrivateKey:
+        """
+        Returns a copy.
         """
 
 

@@ -1,3 +1,0 @@
-2026-04-09 00:06:10 | INFO | D:\CoPaw\desktop\tauri-copaw\src-tauri\target\release\copaw.dist\reme\core\op\base_op.py:277 | ContextChecker.call | ========== cost=0.207419s ==========
-2026-04-09 00:07:20 | INFO | D:\CoPaw\desktop\tauri-copaw\src-tauri\target\release\copaw.dist\reme\core\op\base_op.py:277 | ContextChecker.call | ========== cost=0.091049s ==========
-2026-04-09 00:09:26 | INFO | D:\CoPaw\desktop\tauri-copaw\src-tauri\target\release\copaw.dist\reme\core\op\base_op.py:277 | ContextChecker.call | ========== cost=0.087483s ==========

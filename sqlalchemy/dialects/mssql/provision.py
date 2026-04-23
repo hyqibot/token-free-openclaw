@@ -1,5 +1,5 @@
 # dialects/mssql/provision.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -22,8 +22,15 @@ from ...testing.provision import generate_driver_url
 from ...testing.provision import get_temp_table_name
 from ...testing.provision import log
 from ...testing.provision import normalize_sequence
+from ...testing.provision import post_configure_engine
 from ...testing.provision import run_reap_dbs
 from ...testing.provision import temp_table_keyword_args
+
+
+@post_configure_engine.for_db("mssql")
+def post_configure_engine(url, engine, follower_ident):
+    if engine.driver == "pyodbc":
+        engine.dialect.dbapi.pooling = False
 
 
 @generate_driver_url.for_db("mssql")
@@ -129,6 +136,29 @@ def _mssql_get_temp_table_name(cfg, eng, base_name):
 def drop_all_schema_objects_pre_tables(cfg, eng):
     with eng.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         inspector = inspect(conn)
+
+        # Drop all full-text indexes before dropping catalogs
+        fulltext_indexes = conn.exec_driver_sql(
+            "SELECT OBJECT_SCHEMA_NAME(object_id) AS schema_name, "
+            "OBJECT_NAME(object_id) AS table_name "
+            "FROM sys.fulltext_indexes"
+        ).fetchall()
+
+        for schema_name, table_name in fulltext_indexes:
+            if schema_name:
+                qualified_name = f"[{schema_name}].[{table_name}]"
+            else:
+                qualified_name = f"[{table_name}]"
+            conn.exec_driver_sql(f"DROP FULLTEXT INDEX ON {qualified_name}")
+
+        # Now drop all full-text catalogs
+        fulltext_catalogs = conn.exec_driver_sql(
+            "SELECT name FROM sys.fulltext_catalogs"
+        ).fetchall()
+
+        for (catalog_name,) in fulltext_catalogs:
+            conn.exec_driver_sql(f"DROP FULLTEXT CATALOG [{catalog_name}]")
+
         for schema in (None, "dbo", cfg.test_schema, cfg.test_schema_2):
             for tname in inspector.get_table_names(schema=schema):
                 tb = Table(

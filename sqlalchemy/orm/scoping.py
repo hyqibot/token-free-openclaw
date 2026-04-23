@@ -1,5 +1,5 @@
 # orm/scoping.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from .session import sessionmaker
     from .session import SessionTransaction
     from ..engine import Connection
-    from ..engine import CursorResult
     from ..engine import Engine
     from ..engine import Result
     from ..engine import Row
@@ -69,7 +68,6 @@ if TYPE_CHECKING:
     from ..sql._typing import _T7
     from ..sql._typing import _TypedColumnClauseArgument as _TCCA
     from ..sql.base import Executable
-    from ..sql.dml import UpdateBase
     from ..sql.elements import ClauseElement
     from ..sql.roles import TypedColumnsClauseRole
     from ..sql.selectable import ForUpdateParameter
@@ -280,11 +278,13 @@ class scoped_session(Generic[_S]):
 
             Session = scoped_session(sessionmaker())
 
+
             class MyClass:
                 query: QueryPropertyDescriptor = Session.query_property()
 
+
             # after mappers are defined
-            result = MyClass.query.filter(MyClass.name=='foo').all()
+            result = MyClass.query.filter(MyClass.name == "foo").all()
 
         Produces instances of the session's configured query class by
         default.  To override and use a custom implementation, provide
@@ -548,7 +548,7 @@ class scoped_session(Generic[_S]):
             :meth:`_orm.Session.close` and :meth:`_orm.Session.reset`.
 
             :meth:`_orm.Session.close` - a similar method will additionally
-            prevent re-use of the Session when the parameter
+            prevent reuse of the Session when the parameter
             :paramref:`_orm.Session.close_resets_only` is set to ``False``.
 
         """  # noqa: E501
@@ -686,18 +686,6 @@ class scoped_session(Generic[_S]):
     @overload
     def execute(
         self,
-        statement: UpdateBase,
-        params: Optional[_CoreAnyExecuteParams] = None,
-        *,
-        execution_options: OrmExecuteOptionsParameter = util.EMPTY_DICT,
-        bind_arguments: Optional[_BindArguments] = None,
-        _parent_execute_state: Optional[Any] = None,
-        _add_event: Optional[Any] = None,
-    ) -> CursorResult[Any]: ...
-
-    @overload
-    def execute(
-        self,
         statement: Executable,
         params: Optional[_CoreAnyExecuteParams] = None,
         *,
@@ -730,9 +718,8 @@ class scoped_session(Generic[_S]):
         E.g.::
 
             from sqlalchemy import select
-            result = session.execute(
-                select(User).where(User.id == 5)
-            )
+
+            result = session.execute(select(User).where(User.id == 5))
 
         The API contract of :meth:`_orm.Session.execute` is similar to that
         of :meth:`_engine.Connection.execute`, the :term:`2.0 style` version
@@ -962,10 +949,7 @@ class scoped_session(Generic[_S]):
 
             some_object = session.get(VersionedFoo, (5, 10))
 
-            some_object = session.get(
-                VersionedFoo,
-                {"id": 5, "version_id": 10}
-            )
+            some_object = session.get(VersionedFoo, {"id": 5, "version_id": 10})
 
         .. versionadded:: 1.4 Added :meth:`_orm.Session.get`, which is moved
            from the now legacy :meth:`_orm.Query.get` method.
@@ -1088,8 +1072,7 @@ class scoped_session(Generic[_S]):
             Proxied for the :class:`_orm.Session` class on
             behalf of the :class:`_orm.scoping.scoped_session` class.
 
-        Raises ``sqlalchemy.orm.exc.NoResultFound`` if the query
-        selects no rows.
+        Raises :class:`_exc.NoResultFound` if the query selects no rows.
 
         For a detailed documentation of the arguments see the
         method :meth:`.Session.get`.

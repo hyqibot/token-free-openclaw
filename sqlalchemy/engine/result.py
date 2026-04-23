@@ -1,5 +1,5 @@
 # engine/result.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -52,11 +52,23 @@ else:
     from sqlalchemy.cyextension.resultproxy import tuplegetter as tuplegetter
 
 if typing.TYPE_CHECKING:
-    from ..sql.schema import Column
+    from typing import Type
+
+    from .. import inspection
+    from ..sql import roles
+    from ..sql._typing import _HasClauseElement
+    from ..sql.elements import SQLCoreOperations
     from ..sql.type_api import _ResultProcessorType
 
-_KeyType = Union[str, "Column[Any]"]
-_KeyIndexType = Union[str, "Column[Any]", int]
+_KeyType = Union[
+    str,
+    "SQLCoreOperations[Any]",
+    "roles.TypedColumnsClauseRole[Any]",
+    "roles.ColumnsClauseRole",
+    "Type[Any]",
+    "inspection.Inspectable[_HasClauseElement[Any]]",
+]
+_KeyIndexType = Union[_KeyType, int]
 
 # is overridden in cursor using _CursorKeyMapRecType
 _KeyMapRecType = Any
@@ -724,6 +736,14 @@ class ResultInternal(InPlaceGenerative, Generic[_R]):
 
     @overload
     def _only_one_row(
+        self: ResultInternal[Row[Any]],
+        raise_for_second_row: bool,
+        raise_for_none: bool,
+        scalar: Literal[True],
+    ) -> Any: ...
+
+    @overload
+    def _only_one_row(
         self,
         raise_for_second_row: bool,
         raise_for_none: Literal[True],
@@ -809,7 +829,6 @@ class ResultInternal(InPlaceGenerative, Generic[_R]):
                     "was required"
                 )
         else:
-            next_row = _NO_ROW
             # if we checked for second row then that would have
             # closed us :)
             self._soft_close(hard=True)
@@ -947,7 +966,7 @@ class Result(_WithKeys, ResultInternal[Row[_TP]]):
         self.close()
 
     def close(self) -> None:
-        """close this :class:`_engine.Result`.
+        """Hard close this :class:`_engine.Result`.
 
         The behavior of this method is implementation specific, and is
         not implemented by default.    The method should generally end
@@ -974,9 +993,19 @@ class Result(_WithKeys, ResultInternal[Row[_TP]]):
 
     @property
     def closed(self) -> bool:
-        """return ``True`` if this :class:`_engine.Result` reports .closed
+        """Return ``True`` if this :class:`_engine.Result` was **hard closed**
+        by explicitly calling the :meth:`close` method.
 
-        .. versionadded:: 1.4.43
+        The attribute is **not** True if the :class:`_engine.Result` was only
+        **soft closed**; a "soft close" is the style of close that takes place
+        for example when the :class:`.CursorResult` is returned for a DML
+        only statement without RETURNING, or when all result rows are fetched.
+
+        .. seealso::
+
+            :attr:`.CursorResult.returns_rows` -  attribute specific to
+            :class:`.CursorResult` which indicates if the result is one that
+            may return zero or more rows
 
         """
         raise NotImplementedError()
@@ -1099,17 +1128,15 @@ class Result(_WithKeys, ResultInternal[Row[_TP]]):
             statement = select(table.c.x, table.c.y, table.c.z)
             result = connection.execute(statement)
 
-            for z, y in result.columns('z', 'y'):
-                # ...
-
+            for z, y in result.columns("z", "y"):
+                ...
 
         Example of using the column objects from the statement itself::
 
             for z, y in result.columns(
-                    statement.selected_columns.c.z,
-                    statement.selected_columns.c.y
+                statement.selected_columns.c.z, statement.selected_columns.c.y
             ):
-                # ...
+                ...
 
         .. versionadded:: 1.4
 
@@ -1452,11 +1479,11 @@ class Result(_WithKeys, ResultInternal[Row[_TP]]):
         """Return exactly one scalar result or raise an exception.
 
         This is equivalent to calling :meth:`_engine.Result.scalars` and
-        then :meth:`_engine.Result.one`.
+        then :meth:`_engine.ScalarResult.one`.
 
         .. seealso::
 
-            :meth:`_engine.Result.one`
+            :meth:`_engine.ScalarResult.one`
 
             :meth:`_engine.Result.scalars`
 
@@ -1475,11 +1502,11 @@ class Result(_WithKeys, ResultInternal[Row[_TP]]):
         """Return exactly one scalar result or ``None``.
 
         This is equivalent to calling :meth:`_engine.Result.scalars` and
-        then :meth:`_engine.Result.one_or_none`.
+        then :meth:`_engine.ScalarResult.one_or_none`.
 
         .. seealso::
 
-            :meth:`_engine.Result.one_or_none`
+            :meth:`_engine.ScalarResult.one_or_none`
 
             :meth:`_engine.Result.scalars`
 
@@ -1491,8 +1518,8 @@ class Result(_WithKeys, ResultInternal[Row[_TP]]):
     def one(self) -> Row[_TP]:
         """Return exactly one row or raise an exception.
 
-        Raises :class:`.NoResultFound` if the result returns no
-        rows, or :class:`.MultipleResultsFound` if multiple rows
+        Raises :class:`_exc.NoResultFound` if the result returns no
+        rows, or :class:`_exc.MultipleResultsFound` if multiple rows
         would be returned.
 
         .. note::  This method returns one **row**, e.g. tuple, by default.
@@ -1644,10 +1671,13 @@ class FilterResult(ResultInternal[_R]):
 
     @property
     def closed(self) -> bool:
-        """Return ``True`` if the underlying :class:`_engine.Result` reports
-        closed
+        """Return ``True`` if this :class:`_engine.Result` being
+        proxied by this :class:`_engine.FilterResult` was
+        **hard closed** by explicitly calling the :meth:`_engine.Result.close`
+        method.
 
-        .. versionadded:: 1.4.43
+        This is a direct proxy for the :attr:`_engine.Result.closed` attribute;
+        see that attribute for details.
 
         """
         return self._real_result.closed
@@ -1917,11 +1947,11 @@ class TupleResult(FilterResult[_R], util.TypingOnly):
             """Return exactly one scalar result or raise an exception.
 
             This is equivalent to calling :meth:`_engine.Result.scalars`
-            and then :meth:`_engine.Result.one`.
+            and then :meth:`_engine.ScalarResult.one`.
 
             .. seealso::
 
-                :meth:`_engine.Result.one`
+                :meth:`_engine.ScalarResult.one`
 
                 :meth:`_engine.Result.scalars`
 
@@ -1940,11 +1970,11 @@ class TupleResult(FilterResult[_R], util.TypingOnly):
             """Return exactly one or no scalar result.
 
             This is equivalent to calling :meth:`_engine.Result.scalars`
-            and then :meth:`_engine.Result.one_or_none`.
+            and then :meth:`_engine.ScalarResult.one_or_none`.
 
             .. seealso::
 
-                :meth:`_engine.Result.one_or_none`
+                :meth:`_engine.ScalarResult.one_or_none`
 
                 :meth:`_engine.Result.scalars`
 
@@ -2008,7 +2038,7 @@ class MappingResult(_WithKeys, FilterResult[RowMapping]):
         return self
 
     def columns(self, *col_expressions: _KeyIndexType) -> Self:
-        r"""Establish the columns that should be returned in each row."""
+        """Establish the columns that should be returned in each row."""
         return self._column_slices(col_expressions)
 
     def partitions(
@@ -2222,10 +2252,20 @@ class IteratorResult(Result[_TP]):
 
     @property
     def closed(self) -> bool:
-        """Return ``True`` if this :class:`_engine.IteratorResult` has
-        been closed
+        """Return ``True`` if this :class:`_engine.IteratorResult` was
+        **hard closed** by explicitly calling the :meth:`_engine.Result.close`
+        method.
 
-        .. versionadded:: 1.4.43
+        The attribute is **not** True if the :class:`_engine.Result` was only
+        **soft closed**; a "soft close" is the style of close that takes place
+        for example when the :class:`.CursorResult` is returned for a DML
+        only statement without RETURNING, or when all result rows are fetched.
+
+        .. seealso::
+
+            :attr:`.CursorResult.returns_rows` -  attribute specific to
+            :class:`.CursorResult` which indicates if the result is one that
+            may return zero or more rows
 
         """
         return self._hard_closed

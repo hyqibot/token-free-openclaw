@@ -8,7 +8,6 @@ Support code for building Python extensions on Windows.
 
 """
 import os
-import platform
 import sys
 import subprocess
 import re
@@ -25,7 +24,13 @@ from numpy.distutils import log
 
 import distutils.cygwinccompiler
 from distutils.unixccompiler import UnixCCompiler
-from distutils.msvccompiler import get_build_version as get_build_msvc_version
+
+try:
+    from distutils.msvccompiler import get_build_version as get_build_msvc_version
+except ImportError:
+    def get_build_msvc_version():
+        return None
+
 from distutils.errors import UnknownFileError
 from numpy.distutils.misc_util import (msvc_runtime_library,
                                        msvc_runtime_version,
@@ -184,14 +189,11 @@ def find_python_dll():
     # We can't do much here:
     # - find it in the virtualenv (sys.prefix)
     # - find it in python main dir (sys.base_prefix, if in a virtualenv)
-    # - sys.real_prefix is main dir for virtualenvs in Python 2.7
     # - in system32,
-    # - ortherwise (Sxs), I don't know how to get it.
+    # - otherwise (Sxs), I don't know how to get it.
     stems = [sys.prefix]
-    if hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix:
+    if sys.base_prefix != sys.prefix:
         stems.append(sys.base_prefix)
-    elif hasattr(sys, 'real_prefix') and sys.real_prefix != sys.prefix:
-        stems.append(sys.real_prefix)
 
     sub_dirs = ['', 'lib', 'bin']
     # generate possible combinations of directory trees and sub-directories
@@ -206,11 +208,11 @@ def find_python_dll():
 
     # search in the file system for possible candidates
     major_version, minor_version = tuple(sys.version_info[:2])
-    implementation = platform.python_implementation()
-    if implementation == 'CPython':
+    implementation = sys.implementation.name
+    if implementation == 'cpython':
         dllname = f'python{major_version}{minor_version}.dll'
-    elif implementation == 'PyPy':
-        dllname = f'libpypy{major_version}-c.dll'
+    elif implementation == 'pypy':
+        dllname = f'libpypy{major_version}.{minor_version}-c.dll'
     else:
         dllname = f'Unknown platform {implementation}' 
     print("Looking for %s" % dllname)

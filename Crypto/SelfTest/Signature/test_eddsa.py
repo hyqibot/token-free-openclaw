@@ -432,6 +432,32 @@ class TestEdDSA(unittest.TestCase):
                 hashobj = hashmod.new(msg)
                 verifier.verify(hashobj, exp_signature)
 
+    def test_double_sign_verify_ed25519(self):
+        msg_hash = SHA512.new(b'abc')
+        key = ECC.generate(curve='ed25519')
+        signer = eddsa.new(key, 'rfc8032')
+        verifier = eddsa.new(key, 'rfc8032')
+
+        signature = signer.sign(msg_hash)
+        signature2 = signer.sign(msg_hash)
+        self.assertEqual(signature, signature2)
+
+        verifier.verify(msg_hash, signature)
+        verifier.verify(msg_hash, signature)
+
+    def test_double_sign_verify_ed448(self):
+        msg_hash = SHAKE256.new(b'abc')
+        key = ECC.generate(curve='ed448')
+        signer = eddsa.new(key, 'rfc8032')
+        verifier = eddsa.new(key, 'rfc8032')
+
+        signature = signer.sign(msg_hash)
+        signature2 = signer.sign(msg_hash)
+        self.assertEqual(signature, signature2)
+
+        verifier.verify(msg_hash, signature)
+        verifier.verify(msg_hash, signature)
+
     def test_negative(self):
         key = ECC.generate(curve="ed25519")
         self.assertRaises(ValueError, eddsa.new, key, 'rfc9999')
@@ -445,7 +471,7 @@ class TestExport_Ed25519(unittest.TestCase):
     def test_raw(self):
         key = ECC.generate(curve="Ed25519")
         x, y = key.pointQ.xy
-        raw = bytearray(key._export_eddsa())
+        raw = bytearray(key._export_eddsa_public())
         sign_x = raw[31] >> 7
         raw[31] &= 0x7F
         yt = bytes_to_long(raw[::-1])
@@ -453,7 +479,7 @@ class TestExport_Ed25519(unittest.TestCase):
         self.assertEqual(x & 1, sign_x)
 
         key = ECC.construct(point_x=0, point_y=1, curve="Ed25519")
-        out = key._export_eddsa()
+        out = key._export_eddsa_public()
         self.assertEqual(b'\x01' + b'\x00' * 31, out)
 
 
@@ -462,7 +488,7 @@ class TestExport_Ed448(unittest.TestCase):
     def test_raw(self):
         key = ECC.generate(curve="Ed448")
         x, y = key.pointQ.xy
-        raw = bytearray(key._export_eddsa())
+        raw = bytearray(key._export_eddsa_public())
         sign_x = raw[56] >> 7
         raw[56] &= 0x7F
         yt = bytes_to_long(raw[::-1])
@@ -470,7 +496,7 @@ class TestExport_Ed448(unittest.TestCase):
         self.assertEqual(x & 1, sign_x)
 
         key = ECC.construct(point_x=0, point_y=1, curve="Ed448")
-        out = key._export_eddsa()
+        out = key._export_eddsa_public()
         self.assertEqual(b'\x01' + b'\x00' * 56, out)
 
 

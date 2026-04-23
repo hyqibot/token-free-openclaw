@@ -4,6 +4,7 @@ import ssl
 import typing
 
 import anyio
+import inspect
 
 from .._exceptions import (
     ConnectError,
@@ -112,11 +113,19 @@ class AnyIOBackend(AsyncNetworkBackend):
         }
         with map_exceptions(exc_map):
             with anyio.fail_after(timeout):
-                stream: anyio.abc.ByteStream = await anyio.connect_tcp(
-                    remote_host=host,
-                    remote_port=port,
-                    local_host=local_address,
-                )
+                kwargs: dict[str, typing.Any] = {
+                    "remote_host": host,
+                    "remote_port": port,
+                    "local_host": local_address,
+                }
+                # Workaround: avoid AnyIO's happy-eyeballs TaskGroup path on some
+                # packaged Windows runtimes (can trigger "Task got bad yield: True").
+                try:
+                    if "happy_eyeballs_delay" in inspect.signature(anyio.connect_tcp).parameters:
+                        kwargs["happy_eyeballs_delay"] = None
+                except Exception:
+                    pass
+                stream: anyio.abc.ByteStream = await anyio.connect_tcp(**kwargs)
                 # By default TCP sockets opened in `asyncio` include TCP_NODELAY.
                 for option in socket_options:
                     stream._raw_socket.setsockopt(*option)  # type: ignore[attr-defined] # pragma: no cover

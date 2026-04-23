@@ -140,8 +140,8 @@ class ComplicatedSubArray(SubArray):
         y = self.ravel()
         y[:] = value
 
-    def __array_wrap__(self, obj, context=None):
-        obj = super().__array_wrap__(obj, context)
+    def __array_wrap__(self, obj, context=None, return_scalar=False):
+        obj = super().__array_wrap__(obj, context, return_scalar)
         if context is not None and context[0] is np.multiply:
             obj.info['multiplied'] = obj.info.get('multiplied', 0) + 1
 
@@ -154,6 +154,7 @@ class WrappedArray(NDArrayOperatorsMixin):
     ufunc deferrals are commutative.
     See: https://github.com/numpy/numpy/issues/15200)
     """
+    __slots__ = ('_array', 'attrs')
     __array_priority__ = 20
 
     def __init__(self, array, **attrs):
@@ -163,7 +164,7 @@ class WrappedArray(NDArrayOperatorsMixin):
     def __repr__(self):
         return f"{self.__class__.__name__}(\n{self._array}\n{self.attrs}\n)"
 
-    def __array__(self):
+    def __array__(self, dtype=None, copy=None):
         return np.asarray(self._array)
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
@@ -263,7 +264,7 @@ class TestSubclassing:
         # Checks that masked_array(...,subok=True) preserves the class.
         x = np.arange(5)
         m = [0, 0, 1, 0, 0]
-        xinfo = [(i, j) for (i, j) in zip(x, m)]
+        xinfo = list(zip(x, m))
         xsub = MSubArray(x, mask=m, info={'xsub':xinfo})
         #
         mxsub = masked_array(xsub, subok=False)
@@ -448,3 +449,12 @@ class TestClassWrapping:
         assert_(isinstance(np.divide(wm, m2), WrappedArray))
         assert_(isinstance(np.divide(m2, wm), WrappedArray))
         assert_equal(np.divide(m2, wm), np.divide(wm, m2))
+
+    def test_mixins_have_slots(self):
+        mixin = NDArrayOperatorsMixin()
+        # Should raise an error
+        assert_raises(AttributeError, mixin.__setattr__, "not_a_real_attr", 1)
+
+        m = np.ma.masked_array([1, 3, 5], mask=[False, True, False])
+        wm = WrappedArray(m)
+        assert_raises(AttributeError, wm.__setattr__, "not_an_attr", 2)

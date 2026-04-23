@@ -1,10 +1,9 @@
 # dialects/sqlite/pysqlite.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
 # the MIT License: https://www.opensource.org/licenses/mit-license.php
-# mypy: ignore-errors
 
 
 r"""
@@ -28,7 +27,9 @@ Connect Strings
 ---------------
 
 The file specification for the SQLite database is taken as the "database"
-portion of the URL.  Note that the format of a SQLAlchemy url is::
+portion of the URL.  Note that the format of a SQLAlchemy url is:
+
+.. sourcecode:: text
 
     driver://user:pass@host/database
 
@@ -37,28 +38,28 @@ the **right** of the third slash.   So connecting to a relative filepath
 looks like::
 
     # relative path
-    e = create_engine('sqlite:///path/to/database.db')
+    e = create_engine("sqlite:///path/to/database.db")
 
 An absolute path, which is denoted by starting with a slash, means you
 need **four** slashes::
 
     # absolute path
-    e = create_engine('sqlite:////path/to/database.db')
+    e = create_engine("sqlite:////path/to/database.db")
 
 To use a Windows path, regular drive specifications and backslashes can be
 used. Double backslashes are probably needed::
 
     # absolute path on Windows
-    e = create_engine('sqlite:///C:\\path\\to\\database.db')
+    e = create_engine("sqlite:///C:\\path\\to\\database.db")
 
 To use sqlite ``:memory:`` database specify it as the filename using
-``sqlite://:memory:``. It's also the default if no filepath is
+``sqlite:///:memory:``. It's also the default if no filepath is
 present, specifying only ``sqlite://`` and nothing else::
 
-    # in-memory database
-    e = create_engine('sqlite://:memory:')
+    # in-memory database (note three slashes)
+    e = create_engine("sqlite:///:memory:")
     # also in-memory database
-    e2 = create_engine('sqlite://')
+    e2 = create_engine("sqlite://")
 
 .. _pysqlite_uri_connections:
 
@@ -98,7 +99,9 @@ Above, the pysqlite / sqlite3 DBAPI would be passed arguments as::
 
     sqlite3.connect(
         "file:path/to/database?mode=ro&nolock=1",
-        check_same_thread=True, timeout=10, uri=True
+        check_same_thread=True,
+        timeout=10,
+        uri=True,
     )
 
 Regarding future parameters added to either the Python or native drivers. new
@@ -144,8 +147,11 @@ as follows::
     def regexp(a, b):
         return re.search(a, b) is not None
 
+
     sqlite_connection.create_function(
-        "regexp", 2, regexp,
+        "regexp",
+        2,
+        regexp,
     )
 
 There is currently no support for regular expression flags as a separate
@@ -186,10 +192,12 @@ Keeping in mind that pysqlite's parsing option is not recommended,
 nor should be necessary, for use with SQLAlchemy, usage of PARSE_DECLTYPES
 can be forced if one configures "native_datetime=True" on create_engine()::
 
-    engine = create_engine('sqlite://',
-        connect_args={'detect_types':
-            sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES},
-        native_datetime=True
+    engine = create_engine(
+        "sqlite://",
+        connect_args={
+            "detect_types": sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
+        },
+        native_datetime=True,
     )
 
 With this flag enabled, the DATE and TIMESTAMP types (but note - not the
@@ -244,11 +252,12 @@ Pooling may be disabled for a file based database by specifying the
 parameter::
 
     from sqlalchemy import NullPool
+
     engine = create_engine("sqlite:///myfile.db", poolclass=NullPool)
 
 It's been observed that the :class:`.NullPool` implementation incurs an
 extremely small performance overhead for repeated checkouts due to the lack of
-connection re-use implemented by :class:`.QueuePool`.  However, it still
+connection reuse implemented by :class:`.QueuePool`.  However, it still
 may be beneficial to use this class if the application is experiencing
 issues with files being locked.
 
@@ -263,9 +272,12 @@ globally, and the ``check_same_thread`` flag can be passed to Pysqlite
 as ``False``::
 
     from sqlalchemy.pool import StaticPool
-    engine = create_engine('sqlite://',
-                        connect_args={'check_same_thread':False},
-                        poolclass=StaticPool)
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
 
 Note that using a ``:memory:`` database in multiple threads requires a recent
 version of SQLite.
@@ -284,14 +296,14 @@ needed within multiple threads for this case::
 
     # maintain the same connection per thread
     from sqlalchemy.pool import SingletonThreadPool
-    engine = create_engine('sqlite:///mydb.db',
-                        poolclass=SingletonThreadPool)
+
+    engine = create_engine("sqlite:///mydb.db", poolclass=SingletonThreadPool)
 
 
     # maintain the same connection across all threads
     from sqlalchemy.pool import StaticPool
-    engine = create_engine('sqlite:///mydb.db',
-                        poolclass=StaticPool)
+
+    engine = create_engine("sqlite:///mydb.db", poolclass=StaticPool)
 
 Note that :class:`.SingletonThreadPool` should be configured for the number
 of threads that are to be used; beyond that number, connections will be
@@ -320,13 +332,14 @@ same column, use a custom type that will check each row individually::
     from sqlalchemy import String
     from sqlalchemy import TypeDecorator
 
+
     class MixedBinary(TypeDecorator):
         impl = String
         cache_ok = True
 
         def process_result_value(self, value, dialect):
             if isinstance(value, str):
-                value = bytes(value, 'utf-8')
+                value = bytes(value, "utf-8")
             elif value is not None:
                 value = bytes(value)
 
@@ -340,74 +353,10 @@ Then use the above ``MixedBinary`` datatype in the place where
 Serializable isolation / Savepoints / Transactional DDL
 -------------------------------------------------------
 
-In the section :ref:`sqlite_concurrency`, we refer to the pysqlite
-driver's assortment of issues that prevent several features of SQLite
-from working correctly.  The pysqlite DBAPI driver has several
-long-standing bugs which impact the correctness of its transactional
-behavior.   In its default mode of operation, SQLite features such as
-SERIALIZABLE isolation, transactional DDL, and SAVEPOINT support are
-non-functional, and in order to use these features, workarounds must
-be taken.
+A newly revised version of this important section is now available
+at the top level of the SQLAlchemy SQLite documentation, in the section
+:ref:`sqlite_transactions`.
 
-The issue is essentially that the driver attempts to second-guess the user's
-intent, failing to start transactions and sometimes ending them prematurely, in
-an effort to minimize the SQLite databases's file locking behavior, even
-though SQLite itself uses "shared" locks for read-only activities.
-
-SQLAlchemy chooses to not alter this behavior by default, as it is the
-long-expected behavior of the pysqlite driver; if and when the pysqlite
-driver attempts to repair these issues, that will be more of a driver towards
-defaults for SQLAlchemy.
-
-The good news is that with a few events, we can implement transactional
-support fully, by disabling pysqlite's feature entirely and emitting BEGIN
-ourselves. This is achieved using two event listeners::
-
-    from sqlalchemy import create_engine, event
-
-    engine = create_engine("sqlite:///myfile.db")
-
-    @event.listens_for(engine, "connect")
-    def do_connect(dbapi_connection, connection_record):
-        # disable pysqlite's emitting of the BEGIN statement entirely.
-        # also stops it from emitting COMMIT before any DDL.
-        dbapi_connection.isolation_level = None
-
-    @event.listens_for(engine, "begin")
-    def do_begin(conn):
-        # emit our own BEGIN
-        conn.exec_driver_sql("BEGIN")
-
-.. warning:: When using the above recipe, it is advised to not use the
-   :paramref:`.Connection.execution_options.isolation_level` setting on
-   :class:`_engine.Connection` and :func:`_sa.create_engine`
-   with the SQLite driver,
-   as this function necessarily will also alter the ".isolation_level" setting.
-
-
-Above, we intercept a new pysqlite connection and disable any transactional
-integration.   Then, at the point at which SQLAlchemy knows that transaction
-scope is to begin, we emit ``"BEGIN"`` ourselves.
-
-When we take control of ``"BEGIN"``, we can also control directly SQLite's
-locking modes, introduced at
-`BEGIN TRANSACTION <https://sqlite.org/lang_transaction.html>`_,
-by adding the desired locking mode to our ``"BEGIN"``::
-
-    @event.listens_for(engine, "begin")
-    def do_begin(conn):
-        conn.exec_driver_sql("BEGIN EXCLUSIVE")
-
-.. seealso::
-
-    `BEGIN TRANSACTION <https://sqlite.org/lang_transaction.html>`_ -
-    on the SQLite site
-
-    `sqlite3 SELECT does not BEGIN a transaction <https://bugs.python.org/issue9924>`_ -
-    on the Python bug tracker
-
-    `sqlite3 module breaks transactions and potentially corrupts data <https://bugs.python.org/issue10740>`_ -
-    on the Python bug tracker
 
 .. _pysqlite_udfs:
 
@@ -442,12 +391,20 @@ connection when it is created. That is accomplished with an event listener::
         with engine.connect() as conn:
             print(conn.scalar(text("SELECT UDF()")))
 
-
 """  # noqa
+from __future__ import annotations
 
 import math
 import os
 import re
+from typing import Any
+from typing import Callable
+from typing import cast
+from typing import Optional
+from typing import Pattern
+from typing import TYPE_CHECKING
+from typing import TypeVar
+from typing import Union
 
 from .base import DATE
 from .base import DATETIME
@@ -456,16 +413,33 @@ from ... import exc
 from ... import pool
 from ... import types as sqltypes
 from ... import util
+from ...util.typing import Self
+
+if TYPE_CHECKING:
+    from ...engine.interfaces import ConnectArgsType
+    from ...engine.interfaces import DBAPIConnection
+    from ...engine.interfaces import DBAPICursor
+    from ...engine.interfaces import DBAPIModule
+    from ...engine.interfaces import IsolationLevel
+    from ...engine.interfaces import VersionInfoType
+    from ...engine.url import URL
+    from ...pool.base import PoolProxiedConnection
+    from ...sql.type_api import _BindProcessorType
+    from ...sql.type_api import _ResultProcessorType
 
 
 class _SQLite_pysqliteTimeStamp(DATETIME):
-    def bind_processor(self, dialect):
+    def bind_processor(  # type: ignore[override]
+        self, dialect: SQLiteDialect
+    ) -> Optional[_BindProcessorType[Any]]:
         if dialect.native_datetime:
             return None
         else:
             return DATETIME.bind_processor(self, dialect)
 
-    def result_processor(self, dialect, coltype):
+    def result_processor(  # type: ignore[override]
+        self, dialect: SQLiteDialect, coltype: object
+    ) -> Optional[_ResultProcessorType[Any]]:
         if dialect.native_datetime:
             return None
         else:
@@ -473,13 +447,17 @@ class _SQLite_pysqliteTimeStamp(DATETIME):
 
 
 class _SQLite_pysqliteDate(DATE):
-    def bind_processor(self, dialect):
+    def bind_processor(  # type: ignore[override]
+        self, dialect: SQLiteDialect
+    ) -> Optional[_BindProcessorType[Any]]:
         if dialect.native_datetime:
             return None
         else:
             return DATE.bind_processor(self, dialect)
 
-    def result_processor(self, dialect, coltype):
+    def result_processor(  # type: ignore[override]
+        self, dialect: SQLiteDialect, coltype: object
+    ) -> Optional[_ResultProcessorType[Any]]:
         if dialect.native_datetime:
             return None
         else:
@@ -504,13 +482,13 @@ class SQLiteDialect_pysqlite(SQLiteDialect):
     driver = "pysqlite"
 
     @classmethod
-    def import_dbapi(cls):
+    def import_dbapi(cls) -> DBAPIModule:
         from sqlite3 import dbapi2 as sqlite
 
-        return sqlite
+        return cast("DBAPIModule", sqlite)
 
     @classmethod
-    def _is_url_file_db(cls, url):
+    def _is_url_file_db(cls, url: URL) -> bool:
         if (url.database and url.database != ":memory:") and (
             url.query.get("mode", None) != "memory"
         ):
@@ -519,30 +497,35 @@ class SQLiteDialect_pysqlite(SQLiteDialect):
             return False
 
     @classmethod
-    def get_pool_class(cls, url):
+    def get_pool_class(cls, url: URL) -> type[pool.Pool]:
         if cls._is_url_file_db(url):
             return pool.QueuePool
         else:
             return pool.SingletonThreadPool
 
-    def _get_server_version_info(self, connection):
-        return self.dbapi.sqlite_version_info
+    def _get_server_version_info(self, connection: Any) -> VersionInfoType:
+        return self.dbapi.sqlite_version_info  # type: ignore
 
     _isolation_lookup = SQLiteDialect._isolation_lookup.union(
         {
-            "AUTOCOMMIT": None,
+            "AUTOCOMMIT": None,  # type: ignore[dict-item]
         }
     )
 
-    def set_isolation_level(self, dbapi_connection, level):
+    def set_isolation_level(
+        self, dbapi_connection: DBAPIConnection, level: IsolationLevel
+    ) -> None:
         if level == "AUTOCOMMIT":
             dbapi_connection.isolation_level = None
         else:
             dbapi_connection.isolation_level = ""
             return super().set_isolation_level(dbapi_connection, level)
 
-    def on_connect(self):
-        def regexp(a, b):
+    def detect_autocommit_setting(self, dbapi_conn: DBAPIConnection) -> bool:
+        return dbapi_conn.isolation_level is None
+
+    def on_connect(self) -> Callable[[DBAPIConnection], None]:
+        def regexp(a: str, b: Optional[str]) -> Optional[bool]:
             if b is None:
                 return None
             return re.search(a, b) is not None
@@ -556,12 +539,12 @@ class SQLiteDialect_pysqlite(SQLiteDialect):
         else:
             create_func_kw = {}
 
-        def set_regexp(dbapi_connection):
+        def set_regexp(dbapi_connection: DBAPIConnection) -> None:
             dbapi_connection.create_function(
                 "regexp", 2, regexp, **create_func_kw
             )
 
-        def floor_func(dbapi_connection):
+        def floor_func(dbapi_connection: DBAPIConnection) -> None:
             # NOTE: floor is optionally present in sqlite 3.35+ , however
             # as it is normally non-present we deliver floor() unconditionally
             # for now.
@@ -572,13 +555,13 @@ class SQLiteDialect_pysqlite(SQLiteDialect):
 
         fns = [set_regexp, floor_func]
 
-        def connect(conn):
+        def connect(conn: DBAPIConnection) -> None:
             for fn in fns:
                 fn(conn)
 
         return connect
 
-    def create_connect_args(self, url):
+    def create_connect_args(self, url: URL) -> ConnectArgsType:
         if url.username or url.password or url.host or url.port:
             raise exc.ArgumentError(
                 "Invalid SQLite URL: %s\n"
@@ -603,7 +586,7 @@ class SQLiteDialect_pysqlite(SQLiteDialect):
             ("cached_statements", int),
         ]
         opts = url.query
-        pysqlite_opts = {}
+        pysqlite_opts: dict[str, Any] = {}
         for key, type_ in pysqlite_args:
             util.coerce_kw_type(opts, key, type_, dest=pysqlite_opts)
 
@@ -620,7 +603,7 @@ class SQLiteDialect_pysqlite(SQLiteDialect):
             # to adjust for that here.
             for key, type_ in pysqlite_args:
                 uri_opts.pop(key, None)
-            filename = url.database
+            filename: str = url.database  # type: ignore[assignment]
             if uri_opts:
                 # sorting of keys is for unit test support
                 filename += "?" + (
@@ -640,7 +623,13 @@ class SQLiteDialect_pysqlite(SQLiteDialect):
 
         return ([filename], pysqlite_opts)
 
-    def is_disconnect(self, e, connection, cursor):
+    def is_disconnect(
+        self,
+        e: DBAPIModule.Error,
+        connection: Optional[Union[PoolProxiedConnection, DBAPIConnection]],
+        cursor: Optional[DBAPICursor],
+    ) -> bool:
+        self.dbapi = cast("DBAPIModule", self.dbapi)
         return isinstance(
             e, self.dbapi.ProgrammingError
         ) and "Cannot operate on a closed database." in str(e)
@@ -662,34 +651,36 @@ class _SQLiteDialect_pysqlite_numeric(SQLiteDialect_pysqlite):
     driver = "pysqlite_numeric"
 
     _first_bind = ":1"
-    _not_in_statement_regexp = None
+    _not_in_statement_regexp: Optional[Pattern[str]] = None
 
-    def __init__(self, *arg, **kw):
+    def __init__(self, *arg: Any, **kw: Any) -> None:
         kw.setdefault("paramstyle", "numeric")
         super().__init__(*arg, **kw)
 
-    def create_connect_args(self, url):
+    def create_connect_args(self, url: URL) -> ConnectArgsType:
         arg, opts = super().create_connect_args(url)
         opts["factory"] = self._fix_sqlite_issue_99953()
         return arg, opts
 
-    def _fix_sqlite_issue_99953(self):
+    def _fix_sqlite_issue_99953(self) -> Any:
         import sqlite3
 
         first_bind = self._first_bind
         if self._not_in_statement_regexp:
             nis = self._not_in_statement_regexp
 
-            def _test_sql(sql):
+            def _test_sql(sql: str) -> None:
                 m = nis.search(sql)
                 assert not m, f"Found {nis.pattern!r} in {sql!r}"
 
         else:
 
-            def _test_sql(sql):
+            def _test_sql(sql: str) -> None:
                 pass
 
-        def _numeric_param_as_dict(parameters):
+        def _numeric_param_as_dict(
+            parameters: Any,
+        ) -> Union[dict[str, Any], tuple[Any, ...]]:
             if parameters:
                 assert isinstance(parameters, tuple)
                 return {
@@ -699,13 +690,13 @@ class _SQLiteDialect_pysqlite_numeric(SQLiteDialect_pysqlite):
                 return ()
 
         class SQLiteFix99953Cursor(sqlite3.Cursor):
-            def execute(self, sql, parameters=()):
+            def execute(self, sql: str, parameters: Any = ()) -> Self:
                 _test_sql(sql)
                 if first_bind in sql:
                     parameters = _numeric_param_as_dict(parameters)
                 return super().execute(sql, parameters)
 
-            def executemany(self, sql, parameters):
+            def executemany(self, sql: str, parameters: Any) -> Self:
                 _test_sql(sql)
                 if first_bind in sql:
                     parameters = [
@@ -714,18 +705,27 @@ class _SQLiteDialect_pysqlite_numeric(SQLiteDialect_pysqlite):
                 return super().executemany(sql, parameters)
 
         class SQLiteFix99953Connection(sqlite3.Connection):
-            def cursor(self, factory=None):
-                if factory is None:
-                    factory = SQLiteFix99953Cursor
-                return super().cursor(factory=factory)
+            _CursorT = TypeVar("_CursorT", bound=sqlite3.Cursor)
 
-            def execute(self, sql, parameters=()):
+            def cursor(
+                self,
+                factory: Optional[
+                    Callable[[sqlite3.Connection], _CursorT]
+                ] = None,
+            ) -> _CursorT:
+                if factory is None:
+                    factory = SQLiteFix99953Cursor  # type: ignore[assignment]
+                return super().cursor(factory=factory)  # type: ignore[return-value]  # noqa[E501]
+
+            def execute(
+                self, sql: str, parameters: Any = ()
+            ) -> sqlite3.Cursor:
                 _test_sql(sql)
                 if first_bind in sql:
                     parameters = _numeric_param_as_dict(parameters)
                 return super().execute(sql, parameters)
 
-            def executemany(self, sql, parameters):
+            def executemany(self, sql: str, parameters: Any) -> sqlite3.Cursor:
                 _test_sql(sql)
                 if first_bind in sql:
                     parameters = [
@@ -751,6 +751,6 @@ class _SQLiteDialect_pysqlite_dollar(_SQLiteDialect_pysqlite_numeric):
     _first_bind = "$1"
     _not_in_statement_regexp = re.compile(r"[^\d]:\d+")
 
-    def __init__(self, *arg, **kw):
+    def __init__(self, *arg: Any, **kw: Any) -> None:
         kw.setdefault("paramstyle", "numeric_dollar")
         super().__init__(*arg, **kw)

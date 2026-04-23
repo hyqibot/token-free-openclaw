@@ -8,20 +8,17 @@ from cryptography.hazmat.primitives.asymmetric.types import (
     PrivateKeyTypes,
     PublicKeyTypes,
 )
+from cryptography.utils import Buffer
 
-def private_key_from_ptr(
-    ptr: int,
-    unsafe_skip_rsa_key_validation: bool,
-) -> PrivateKeyTypes: ...
 def load_der_private_key(
-    data: bytes,
+    data: Buffer,
     password: bytes | None,
     backend: typing.Any = None,
     *,
     unsafe_skip_rsa_key_validation: bool = False,
 ) -> PrivateKeyTypes: ...
 def load_pem_private_key(
-    data: bytes,
+    data: Buffer,
     password: bytes | None,
     backend: typing.Any = None,
     *,

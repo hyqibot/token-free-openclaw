@@ -1,13 +1,11 @@
 # orm/events.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
 # the MIT License: https://www.opensource.org/licenses/mit-license.php
 
-"""ORM event interfaces.
-
-"""
+"""ORM event interfaces."""
 from __future__ import annotations
 
 from typing import Any
@@ -207,10 +205,12 @@ class InstanceEvents(event.Events[ClassManager[Any]]):
 
         from sqlalchemy import event
 
+
         def my_load_listener(target, context):
             print("on load!")
 
-        event.listen(SomeClass, 'load', my_load_listener)
+
+        event.listen(SomeClass, "load", my_load_listener)
 
     Available targets include:
 
@@ -466,8 +466,7 @@ class InstanceEvents(event.Events[ClassManager[Any]]):
             the existing loading context is maintained for the object after the
             event is called::
 
-                @event.listens_for(
-                    SomeClass, "load", restore_load_context=True)
+                @event.listens_for(SomeClass, "load", restore_load_context=True)
                 def on_load(instance, context):
                     instance.some_unloaded_attribute
 
@@ -502,7 +501,7 @@ class InstanceEvents(event.Events[ClassManager[Any]]):
 
             :meth:`.SessionEvents.loaded_as_persistent`
 
-        """
+        """  # noqa: E501
 
     def refresh(
         self, target: _O, context: QueryContext, attrs: Optional[Iterable[str]]
@@ -736,7 +735,8 @@ class _InstanceEventsHold(_EventsHold[_ET]):
     def resolve(self, class_: Type[_O]) -> Optional[ClassManager[_O]]:
         return instrumentation.opt_manager_of_class(class_)
 
-    class HoldInstanceEvents(_EventsHold.HoldEvents[_ET], InstanceEvents):  # type: ignore [misc] # noqa: E501
+    # this fails on pyright if you use Any.  Fails on mypy if you use _ET
+    class HoldInstanceEvents(_EventsHold.HoldEvents[_ET], InstanceEvents):  # type: ignore[valid-type,misc] # noqa: E501
         pass
 
     dispatch = event.dispatcher(HoldInstanceEvents)
@@ -749,6 +749,7 @@ class MapperEvents(event.Events[mapperlib.Mapper[Any]]):
 
         from sqlalchemy import event
 
+
         def my_before_insert_listener(mapper, connection, target):
             # execute a stored procedure upon INSERT,
             # apply the value to the row to be inserted
@@ -756,10 +757,10 @@ class MapperEvents(event.Events[mapperlib.Mapper[Any]]):
                 text("select my_special_function(%d)" % target.special_number)
             ).scalar()
 
+
         # associate the listener function with SomeClass,
         # to execute during the "before_insert" hook
-        event.listen(
-            SomeClass, 'before_insert', my_before_insert_listener)
+        event.listen(SomeClass, "before_insert", my_before_insert_listener)
 
     Available targets include:
 
@@ -925,9 +926,10 @@ class MapperEvents(event.Events[mapperlib.Mapper[Any]]):
 
             Base = declarative_base()
 
+
             @event.listens_for(Base, "instrument_class", propagate=True)
             def on_new_class(mapper, cls_):
-                " ... "
+                "..."
 
         :param mapper: the :class:`_orm.Mapper` which is the target
          of this event.
@@ -973,45 +975,46 @@ class MapperEvents(event.Events[mapperlib.Mapper[Any]]):
 
         """
 
+    @event._omit_standard_example
     def before_mapper_configured(
         self, mapper: Mapper[_O], class_: Type[_O]
     ) -> None:
         """Called right before a specific mapper is to be configured.
 
-        This event is intended to allow a specific mapper to be skipped during
-        the configure step, by returning the :attr:`.orm.interfaces.EXT_SKIP`
-        symbol which indicates to the :func:`.configure_mappers` call that this
-        particular mapper (or hierarchy of mappers, if ``propagate=True`` is
-        used) should be skipped in the current configuration run. When one or
-        more mappers are skipped, the he "new mappers" flag will remain set,
-        meaning the :func:`.configure_mappers` function will continue to be
-        called when mappers are used, to continue to try to configure all
-        available mappers.
+        The :meth:`.MapperEvents.before_mapper_configured` event is invoked
+        for each mapper that is encountered when the
+        :func:`_orm.configure_mappers` function proceeds through the current
+        list of not-yet-configured mappers.   It is similar to the
+        :meth:`.MapperEvents.mapper_configured` event, except that it's invoked
+        right before the configuration occurs, rather than afterwards.
 
-        In comparison to the other configure-level events,
-        :meth:`.MapperEvents.before_configured`,
-        :meth:`.MapperEvents.after_configured`, and
-        :meth:`.MapperEvents.mapper_configured`, the
-        :meth;`.MapperEvents.before_mapper_configured` event provides for a
-        meaningful return value when it is registered with the ``retval=True``
-        parameter.
+        The :meth:`.MapperEvents.before_mapper_configured` event includes
+        the special capability where it can force the configure step for a
+        specific mapper to be skipped; to use this feature, establish
+        the event using the ``retval=True`` parameter and return
+        the :attr:`.orm.interfaces.EXT_SKIP` symbol to indicate the mapper
+        should be left unconfigured::
 
-        .. versionadded:: 1.3
-
-        e.g.::
-
+            from sqlalchemy import event
             from sqlalchemy.orm import EXT_SKIP
+            from sqlalchemy.orm import DeclarativeBase
 
-            Base = declarative_base()
 
-            DontConfigureBase = declarative_base()
+            class DontConfigureBase(DeclarativeBase):
+                pass
+
 
             @event.listens_for(
                 DontConfigureBase,
-                "before_mapper_configured", retval=True, propagate=True)
+                "before_mapper_configured",
+                # support return values for the event
+                retval=True,
+                # propagate the listener to all subclasses of
+                # DontConfigureBase
+                propagate=True,
+            )
             def dont_configure(mapper, cls):
                 return EXT_SKIP
-
 
         .. seealso::
 
@@ -1052,15 +1055,14 @@ class MapperEvents(event.Events[mapperlib.Mapper[Any]]):
         event; this event invokes only after all known mappings have been
         fully configured.
 
-        The :meth:`.MapperEvents.mapper_configured` event, unlike
+        The :meth:`.MapperEvents.mapper_configured` event, unlike the
         :meth:`.MapperEvents.before_configured` or
-        :meth:`.MapperEvents.after_configured`,
-        is called for each mapper/class individually, and the mapper is
-        passed to the event itself.  It also is called exactly once for
-        a particular mapper.  The event is therefore useful for
-        configurational steps that benefit from being invoked just once
-        on a specific mapper basis, which don't require that "backref"
-        configurations are necessarily ready yet.
+        :meth:`.MapperEvents.after_configured` events, is called for each
+        mapper/class individually, and the mapper is passed to the event
+        itself.  It also is called exactly once for a particular mapper.  The
+        event is therefore useful for configurational steps that benefit from
+        being invoked just once on a specific mapper basis, which don't require
+        that "backref" configurations are necessarily ready yet.
 
         :param mapper: the :class:`_orm.Mapper` which is the target
          of this event.
@@ -1077,6 +1079,7 @@ class MapperEvents(event.Events[mapperlib.Mapper[Any]]):
         """
         # TODO: need coverage for this event
 
+    @event._omit_standard_example
     def before_configured(self) -> None:
         """Called before a series of mappers have been configured.
 
@@ -1088,36 +1091,27 @@ class MapperEvents(event.Events[mapperlib.Mapper[Any]]):
         new mappers have been made available and new mapper use is
         detected.
 
+        Similar events to this one include
+        :meth:`.MapperEvents.after_configured`, which is invoked after a series
+        of mappers has been configured, as well as
+        :meth:`.MapperEvents.before_mapper_configured` and
+        :meth:`.MapperEvents.mapper_configured`, which are both invoked on a
+        per-mapper basis.
+
         This event can **only** be applied to the :class:`_orm.Mapper` class,
-        and not to individual mappings or mapped classes. It is only invoked
-        for all mappings as a whole::
+        and not to individual mappings or mapped classes::
 
             from sqlalchemy.orm import Mapper
 
+
             @event.listens_for(Mapper, "before_configured")
-            def go():
-                ...
+            def go(): ...
 
-        Contrast this event to :meth:`.MapperEvents.after_configured`,
-        which is invoked after the series of mappers has been configured,
-        as well as :meth:`.MapperEvents.before_mapper_configured`
-        and :meth:`.MapperEvents.mapper_configured`, which are both invoked
-        on a per-mapper basis.
-
-        Theoretically this event is called once per
-        application, but is actually called any time new mappers
-        are to be affected by a :func:`_orm.configure_mappers`
-        call.   If new mappings are constructed after existing ones have
-        already been used, this event will likely be called again.  To ensure
-        that a particular event is only called once and no further, the
-        ``once=True`` argument (new in 0.9.4) can be applied::
-
-            from sqlalchemy.orm import mapper
-
-            @event.listens_for(mapper, "before_configured", once=True)
-            def go():
-                ...
-
+        Typically, this event is called once per application, but in practice
+        may be called more than once, any time new mappers are to be affected
+        by a :func:`_orm.configure_mappers` call.   If new mappings are
+        constructed after existing ones have already been used, this event will
+        likely be called again.
 
         .. seealso::
 
@@ -1129,6 +1123,7 @@ class MapperEvents(event.Events[mapperlib.Mapper[Any]]):
 
         """
 
+    @event._omit_standard_example
     def after_configured(self) -> None:
         """Called after a series of mappers have been configured.
 
@@ -1140,37 +1135,27 @@ class MapperEvents(event.Events[mapperlib.Mapper[Any]]):
         new mappers have been made available and new mapper use is
         detected.
 
-        Contrast this event to the :meth:`.MapperEvents.mapper_configured`
-        event, which is called on a per-mapper basis while the configuration
-        operation proceeds; unlike that event, when this event is invoked,
-        all cross-configurations (e.g. backrefs) will also have been made
-        available for any mappers that were pending.
-        Also contrast to :meth:`.MapperEvents.before_configured`,
-        which is invoked before the series of mappers has been configured.
+        Similar events to this one include
+        :meth:`.MapperEvents.before_configured`, which is invoked before a
+        series of mappers are configured, as well as
+        :meth:`.MapperEvents.before_mapper_configured` and
+        :meth:`.MapperEvents.mapper_configured`, which are both invoked on a
+        per-mapper basis.
 
         This event can **only** be applied to the :class:`_orm.Mapper` class,
-        and not to individual mappings or
-        mapped classes.  It is only invoked for all mappings as a whole::
+        and not to individual mappings or mapped classes::
 
             from sqlalchemy.orm import Mapper
 
+
             @event.listens_for(Mapper, "after_configured")
-            def go():
-                # ...
+            def go(): ...
 
-        Theoretically this event is called once per
-        application, but is actually called any time new mappers
-        have been affected by a :func:`_orm.configure_mappers`
-        call.   If new mappings are constructed after existing ones have
-        already been used, this event will likely be called again.  To ensure
-        that a particular event is only called once and no further, the
-        ``once=True`` argument (new in 0.9.4) can be applied::
-
-            from sqlalchemy.orm import mapper
-
-            @event.listens_for(mapper, "after_configured", once=True)
-            def go():
-                # ...
+        Typically, this event is called once per application, but in practice
+        may be called more than once, any time new mappers are to be affected
+        by a :func:`_orm.configure_mappers` call.   If new mappings are
+        constructed after existing ones have already been used, this event will
+        likely be called again.
 
         .. seealso::
 
@@ -1540,7 +1525,8 @@ class _MapperEventsHold(_EventsHold[_ET]):
     ) -> Optional[Mapper[_T]]:
         return _mapper_or_none(class_)
 
-    class HoldMapperEvents(_EventsHold.HoldEvents[_ET], MapperEvents):  # type: ignore [misc] # noqa: E501
+    # this fails on pyright if you use Any.  Fails on mypy if you use _ET
+    class HoldMapperEvents(_EventsHold.HoldEvents[_ET], MapperEvents):  # type: ignore[valid-type,misc] # noqa: E501
         pass
 
     dispatch = event.dispatcher(HoldMapperEvents)
@@ -1557,8 +1543,10 @@ class SessionEvents(event.Events[Session]):
         from sqlalchemy import event
         from sqlalchemy.orm import sessionmaker
 
+
         def my_before_commit(session):
             print("before commit!")
+
 
         Session = sessionmaker()
 
@@ -1595,7 +1583,7 @@ class SessionEvents(event.Events[Session]):
     _dispatch_target = Session
 
     def _lifecycle_event(  # type: ignore [misc]
-        fn: Callable[[SessionEvents, Session, Any], None]
+        fn: Callable[[SessionEvents, Session, Any], None],
     ) -> Callable[[SessionEvents, Session, Any], None]:
         _sessionevents_lifecycle_event_names.add(fn.__name__)
         return fn
@@ -1779,7 +1767,7 @@ class SessionEvents(event.Events[Session]):
                 @event.listens_for(session, "after_transaction_create")
                 def after_transaction_create(session, transaction):
                     if transaction.parent is None:
-                        # work with top-level transaction
+                        ...  # work with top-level transaction
 
          To detect if the :class:`.SessionTransaction` is a SAVEPOINT, use the
          :attr:`.SessionTransaction.nested` attribute::
@@ -1787,8 +1775,7 @@ class SessionEvents(event.Events[Session]):
                 @event.listens_for(session, "after_transaction_create")
                 def after_transaction_create(session, transaction):
                     if transaction.nested:
-                        # work with SAVEPOINT transaction
-
+                        ...  # work with SAVEPOINT transaction
 
         .. seealso::
 
@@ -1820,7 +1807,7 @@ class SessionEvents(event.Events[Session]):
                 @event.listens_for(session, "after_transaction_create")
                 def after_transaction_end(session, transaction):
                     if transaction.parent is None:
-                        # work with top-level transaction
+                        ...  # work with top-level transaction
 
          To detect if the :class:`.SessionTransaction` is a SAVEPOINT, use the
          :attr:`.SessionTransaction.nested` attribute::
@@ -1828,8 +1815,7 @@ class SessionEvents(event.Events[Session]):
                 @event.listens_for(session, "after_transaction_create")
                 def after_transaction_end(session, transaction):
                     if transaction.nested:
-                        # work with SAVEPOINT transaction
-
+                        ...  # work with SAVEPOINT transaction
 
         .. seealso::
 
@@ -2455,10 +2441,10 @@ class AttributeEvents(event.Events[QueryableAttribute[Any]]):
 
         from sqlalchemy import event
 
-        @event.listens_for(MyClass.collection, 'append', propagate=True)
+
+        @event.listens_for(MyClass.collection, "append", propagate=True)
         def my_append_listener(target, value, initiator):
             print("received append event for target: %s" % target)
-
 
     Listeners have the option to return a possibly modified version of the
     value, when the :paramref:`.AttributeEvents.retval` flag is passed to
@@ -2468,11 +2454,12 @@ class AttributeEvents(event.Events[QueryableAttribute[Any]]):
         def validate_phone(target, value, oldvalue, initiator):
             "Strip non-numeric characters from a phone number"
 
-            return re.sub(r'\D', '', value)
+            return re.sub(r"\D", "", value)
+
 
         # setup listener on UserContact.phone attribute, instructing
         # it to use the return value
-        listen(UserContact.phone, 'set', validate_phone, retval=True)
+        listen(UserContact.phone, "set", validate_phone, retval=True)
 
     A validation function like the above can also raise an exception
     such as :exc:`ValueError` to halt the operation.
@@ -2482,7 +2469,7 @@ class AttributeEvents(event.Events[QueryableAttribute[Any]]):
     as when using mapper inheritance patterns::
 
 
-        @event.listens_for(MySuperClass.attr, 'set', propagate=True)
+        @event.listens_for(MySuperClass.attr, "set", propagate=True)
         def receive_set(target, value, initiator):
             print("value set: %s" % target)
 
@@ -2715,9 +2702,11 @@ class AttributeEvents(event.Events[QueryableAttribute[Any]]):
 
             from sqlalchemy.orm.attributes import OP_BULK_REPLACE
 
+
             @event.listens_for(SomeObject.collection, "bulk_replace")
             def process_collection(target, values, initiator):
                 values[:] = [_make_value(value) for value in values]
+
 
             @event.listens_for(SomeObject.collection, "append", retval=True)
             def process_collection(target, value, initiator):
@@ -2866,16 +2855,18 @@ class AttributeEvents(event.Events[QueryableAttribute[Any]]):
 
             SOME_CONSTANT = 3.1415926
 
+
             class MyClass(Base):
                 # ...
 
                 some_attribute = Column(Numeric, default=SOME_CONSTANT)
 
+
             @event.listens_for(
-                MyClass.some_attribute, "init_scalar",
-                retval=True, propagate=True)
+                MyClass.some_attribute, "init_scalar", retval=True, propagate=True
+            )
             def _init_some_attribute(target, dict_, value):
-                dict_['some_attribute'] = SOME_CONSTANT
+                dict_["some_attribute"] = SOME_CONSTANT
                 return SOME_CONSTANT
 
         Above, we initialize the attribute ``MyClass.some_attribute`` to the
@@ -2911,9 +2902,10 @@ class AttributeEvents(event.Events[QueryableAttribute[Any]]):
 
             SOME_CONSTANT = 3.1415926
 
+
             @event.listens_for(
-                MyClass.some_attribute, "init_scalar",
-                retval=True, propagate=True)
+                MyClass.some_attribute, "init_scalar", retval=True, propagate=True
+            )
             def _init_some_attribute(target, dict_, value):
                 # will also fire off attribute set events
                 target.some_attribute = SOME_CONSTANT
@@ -2950,7 +2942,7 @@ class AttributeEvents(event.Events[QueryableAttribute[Any]]):
             :ref:`examples_instrumentation` - see the
             ``active_column_defaults.py`` example.
 
-        """
+        """  # noqa: E501
 
     def init_collection(
         self,
@@ -3088,8 +3080,8 @@ class QueryEvents(event.Events[Query[Any]]):
             @event.listens_for(Query, "before_compile", retval=True)
             def no_deleted(query):
                 for desc in query.column_descriptions:
-                    if desc['type'] is User:
-                        entity = desc['entity']
+                    if desc["type"] is User:
+                        entity = desc["entity"]
                         query = query.filter(entity.deleted == False)
                 return query
 
@@ -3105,12 +3097,11 @@ class QueryEvents(event.Events[Query[Any]]):
         re-establish the query being cached, apply the event adding the
         ``bake_ok`` flag::
 
-            @event.listens_for(
-                Query, "before_compile", retval=True, bake_ok=True)
+            @event.listens_for(Query, "before_compile", retval=True, bake_ok=True)
             def my_event(query):
                 for desc in query.column_descriptions:
-                    if desc['type'] is User:
-                        entity = desc['entity']
+                    if desc["type"] is User:
+                        entity = desc["entity"]
                         query = query.filter(entity.deleted == False)
                 return query
 
@@ -3131,7 +3122,7 @@ class QueryEvents(event.Events[Query[Any]]):
 
             :ref:`baked_with_before_compile`
 
-        """
+        """  # noqa: E501
 
     def before_compile_update(
         self, query: Query[Any], update_context: BulkUpdate
@@ -3151,11 +3142,13 @@ class QueryEvents(event.Events[Query[Any]]):
             @event.listens_for(Query, "before_compile_update", retval=True)
             def no_deleted(query, update_context):
                 for desc in query.column_descriptions:
-                    if desc['type'] is User:
-                        entity = desc['entity']
+                    if desc["type"] is User:
+                        entity = desc["entity"]
                         query = query.filter(entity.deleted == False)
 
-                        update_context.values['timestamp'] = datetime.utcnow()
+                        update_context.values["timestamp"] = datetime.datetime.now(
+                            datetime.UTC
+                        )
                 return query
 
         The ``.values`` dictionary of the "update context" object can also
@@ -3183,7 +3176,7 @@ class QueryEvents(event.Events[Query[Any]]):
             :meth:`.QueryEvents.before_compile_delete`
 
 
-        """
+        """  # noqa: E501
 
     def before_compile_delete(
         self, query: Query[Any], delete_context: BulkDelete
@@ -3202,8 +3195,8 @@ class QueryEvents(event.Events[Query[Any]]):
             @event.listens_for(Query, "before_compile_delete", retval=True)
             def no_deleted(query, delete_context):
                 for desc in query.column_descriptions:
-                    if desc['type'] is User:
-                        entity = desc['entity']
+                    if desc["type"] is User:
+                        entity = desc["entity"]
                         query = query.filter(entity.deleted == False)
                 return query
 

@@ -9,6 +9,7 @@ import datetime
 import hashlib
 import ipaddress
 import typing
+from collections.abc import Iterable, Iterator
 
 from cryptography import utils
 from cryptography.hazmat.bindings._rust import asn1
@@ -109,9 +110,7 @@ class ExtensionType(metaclass=abc.ABCMeta):
 
 
 class Extensions:
-    def __init__(
-        self, extensions: typing.Iterable[Extension[ExtensionType]]
-    ) -> None:
+    def __init__(self, extensions: Iterable[Extension[ExtensionType]]) -> None:
         self._extensions = list(extensions)
 
     def get_extension_for_oid(
@@ -182,7 +181,7 @@ class AuthorityKeyIdentifier(ExtensionType):
     def __init__(
         self,
         key_identifier: bytes | None,
-        authority_cert_issuer: typing.Iterable[GeneralName] | None,
+        authority_cert_issuer: Iterable[GeneralName] | None,
         authority_cert_serial_number: int | None,
     ) -> None:
         if (authority_cert_issuer is None) != (
@@ -323,9 +322,7 @@ class SubjectKeyIdentifier(ExtensionType):
 class AuthorityInformationAccess(ExtensionType):
     oid = ExtensionOID.AUTHORITY_INFORMATION_ACCESS
 
-    def __init__(
-        self, descriptions: typing.Iterable[AccessDescription]
-    ) -> None:
+    def __init__(self, descriptions: Iterable[AccessDescription]) -> None:
         descriptions = list(descriptions)
         if not all(isinstance(x, AccessDescription) for x in descriptions):
             raise TypeError(
@@ -356,9 +353,7 @@ class AuthorityInformationAccess(ExtensionType):
 class SubjectInformationAccess(ExtensionType):
     oid = ExtensionOID.SUBJECT_INFORMATION_ACCESS
 
-    def __init__(
-        self, descriptions: typing.Iterable[AccessDescription]
-    ) -> None:
+    def __init__(self, descriptions: Iterable[AccessDescription]) -> None:
         descriptions = list(descriptions)
         if not all(isinstance(x, AccessDescription) for x in descriptions):
             raise TypeError(
@@ -401,8 +396,8 @@ class AccessDescription:
 
     def __repr__(self) -> str:
         return (
-            "<AccessDescription(access_method={0.access_method}, access_locati"
-            "on={0.access_location})>".format(self)
+            f"<AccessDescription(access_method={self.access_method}, "
+            f"access_location={self.access_location})>"
         )
 
     def __eq__(self, other: object) -> bool:
@@ -456,8 +451,8 @@ class BasicConstraints(ExtensionType):
 
     def __repr__(self) -> str:
         return (
-            "<BasicConstraints(ca={0.ca}, " "path_length={0.path_length})>"
-        ).format(self)
+            f"<BasicConstraints(ca={self.ca}, path_length={self.path_length})>"
+        )
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, BasicConstraints):
@@ -505,7 +500,7 @@ class CRLDistributionPoints(ExtensionType):
     oid = ExtensionOID.CRL_DISTRIBUTION_POINTS
 
     def __init__(
-        self, distribution_points: typing.Iterable[DistributionPoint]
+        self, distribution_points: Iterable[DistributionPoint]
     ) -> None:
         distribution_points = list(distribution_points)
         if not all(
@@ -542,7 +537,7 @@ class FreshestCRL(ExtensionType):
     oid = ExtensionOID.FRESHEST_CRL
 
     def __init__(
-        self, distribution_points: typing.Iterable[DistributionPoint]
+        self, distribution_points: Iterable[DistributionPoint]
     ) -> None:
         distribution_points = list(distribution_points)
         if not all(
@@ -578,10 +573,10 @@ class FreshestCRL(ExtensionType):
 class DistributionPoint:
     def __init__(
         self,
-        full_name: typing.Iterable[GeneralName] | None,
+        full_name: Iterable[GeneralName] | None,
         relative_name: RelativeDistinguishedName | None,
         reasons: frozenset[ReasonFlags] | None,
-        crl_issuer: typing.Iterable[GeneralName] | None,
+        crl_issuer: Iterable[GeneralName] | None,
     ) -> None:
         if full_name and relative_name:
             raise ValueError(
@@ -729,6 +724,31 @@ _CRLREASONFLAGS = {
     ReasonFlags.aa_compromise: 8,
 }
 
+#    CRLReason ::= ENUMERATED {
+#        unspecified             (0),
+#        keyCompromise           (1),
+#        cACompromise            (2),
+#        affiliationChanged      (3),
+#        superseded              (4),
+#        cessationOfOperation    (5),
+#        certificateHold         (6),
+#             -- value 7 is not used
+#        removeFromCRL           (8),
+#        privilegeWithdrawn      (9),
+#        aACompromise           (10) }
+_CRL_ENTRY_REASON_ENUM_TO_CODE = {
+    ReasonFlags.unspecified: 0,
+    ReasonFlags.key_compromise: 1,
+    ReasonFlags.ca_compromise: 2,
+    ReasonFlags.affiliation_changed: 3,
+    ReasonFlags.superseded: 4,
+    ReasonFlags.cessation_of_operation: 5,
+    ReasonFlags.certificate_hold: 6,
+    ReasonFlags.remove_from_crl: 8,
+    ReasonFlags.privilege_withdrawn: 9,
+    ReasonFlags.aa_compromise: 10,
+}
+
 
 class PolicyConstraints(ExtensionType):
     oid = ExtensionOID.POLICY_CONSTRAINTS
@@ -798,12 +818,11 @@ class PolicyConstraints(ExtensionType):
 class CertificatePolicies(ExtensionType):
     oid = ExtensionOID.CERTIFICATE_POLICIES
 
-    def __init__(self, policies: typing.Iterable[PolicyInformation]) -> None:
+    def __init__(self, policies: Iterable[PolicyInformation]) -> None:
         policies = list(policies)
         if not all(isinstance(x, PolicyInformation) for x in policies):
             raise TypeError(
-                "Every item in the policies list must be a "
-                "PolicyInformation"
+                "Every item in the policies list must be a PolicyInformation"
             )
 
         self._policies = policies
@@ -830,7 +849,7 @@ class PolicyInformation:
     def __init__(
         self,
         policy_identifier: ObjectIdentifier,
-        policy_qualifiers: typing.Iterable[str | UserNotice] | None,
+        policy_qualifiers: Iterable[str | UserNotice] | None,
     ) -> None:
         if not isinstance(policy_identifier, ObjectIdentifier):
             raise TypeError("policy_identifier must be an ObjectIdentifier")
@@ -851,8 +870,8 @@ class PolicyInformation:
 
     def __repr__(self) -> str:
         return (
-            "<PolicyInformation(policy_identifier={0.policy_identifier}, polic"
-            "y_qualifiers={0.policy_qualifiers})>".format(self)
+            f"<PolicyInformation(policy_identifier={self.policy_identifier}, "
+            f"policy_qualifiers={self.policy_qualifiers})>"
         )
 
     def __eq__(self, other: object) -> bool:
@@ -866,9 +885,7 @@ class PolicyInformation:
 
     def __hash__(self) -> int:
         if self.policy_qualifiers is not None:
-            pq: tuple[str | UserNotice, ...] | None = tuple(
-                self.policy_qualifiers
-            )
+            pq = tuple(self.policy_qualifiers)
         else:
             pq = None
 
@@ -903,8 +920,8 @@ class UserNotice:
 
     def __repr__(self) -> str:
         return (
-            "<UserNotice(notice_reference={0.notice_reference}, explicit_text="
-            "{0.explicit_text!r})>".format(self)
+            f"<UserNotice(notice_reference={self.notice_reference}, "
+            f"explicit_text={self.explicit_text!r})>"
         )
 
     def __eq__(self, other: object) -> bool:
@@ -932,7 +949,7 @@ class NoticeReference:
     def __init__(
         self,
         organization: str | None,
-        notice_numbers: typing.Iterable[int],
+        notice_numbers: Iterable[int],
     ) -> None:
         self._organization = organization
         notice_numbers = list(notice_numbers)
@@ -943,8 +960,8 @@ class NoticeReference:
 
     def __repr__(self) -> str:
         return (
-            "<NoticeReference(organization={0.organization!r}, notice_numbers="
-            "{0.notice_numbers})>".format(self)
+            f"<NoticeReference(organization={self.organization!r}, "
+            f"notice_numbers={self.notice_numbers})>"
         )
 
     def __eq__(self, other: object) -> bool:
@@ -971,7 +988,7 @@ class NoticeReference:
 class ExtendedKeyUsage(ExtensionType):
     oid = ExtensionOID.EXTENDED_KEY_USAGE
 
-    def __init__(self, usages: typing.Iterable[ObjectIdentifier]) -> None:
+    def __init__(self, usages: Iterable[ObjectIdentifier]) -> None:
         usages = list(usages)
         if not all(isinstance(x, ObjectIdentifier) for x in usages):
             raise TypeError(
@@ -1039,7 +1056,7 @@ class PrecertPoison(ExtensionType):
 class TLSFeature(ExtensionType):
     oid = ExtensionOID.TLS_FEATURE
 
-    def __init__(self, features: typing.Iterable[TLSFeatureType]) -> None:
+    def __init__(self, features: Iterable[TLSFeatureType]) -> None:
         features = list(features)
         if (
             not all(isinstance(x, TLSFeatureType) for x in features)
@@ -1249,13 +1266,78 @@ class KeyUsage(ExtensionType):
         return rust_x509.encode_extension_value(self)
 
 
+class PrivateKeyUsagePeriod(ExtensionType):
+    oid = ExtensionOID.PRIVATE_KEY_USAGE_PERIOD
+
+    def __init__(
+        self,
+        not_before: datetime.datetime | None,
+        not_after: datetime.datetime | None,
+    ) -> None:
+        if (
+            not isinstance(not_before, datetime.datetime)
+            and not_before is not None
+        ):
+            raise TypeError("not_before must be a datetime.datetime or None")
+
+        if (
+            not isinstance(not_after, datetime.datetime)
+            and not_after is not None
+        ):
+            raise TypeError("not_after must be a datetime.datetime or None")
+
+        if not_before is None and not_after is None:
+            raise ValueError(
+                "At least one of not_before and not_after must not be None"
+            )
+
+        if (
+            not_before is not None
+            and not_after is not None
+            and not_before > not_after
+        ):
+            raise ValueError("not_before must be before not_after")
+
+        self._not_before = not_before
+        self._not_after = not_after
+
+    @property
+    def not_before(self) -> datetime.datetime | None:
+        return self._not_before
+
+    @property
+    def not_after(self) -> datetime.datetime | None:
+        return self._not_after
+
+    def __repr__(self) -> str:
+        return (
+            f"<PrivateKeyUsagePeriod(not_before={self.not_before}, "
+            f"not_after={self.not_after})>"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, PrivateKeyUsagePeriod):
+            return NotImplemented
+
+        return (
+            self.not_before == other.not_before
+            and self.not_after == other.not_after
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.not_before, self.not_after))
+
+    def public_bytes(self) -> bytes:
+        return rust_x509.encode_extension_value(self)
+
+
 class NameConstraints(ExtensionType):
     oid = ExtensionOID.NAME_CONSTRAINTS
 
     def __init__(
         self,
-        permitted_subtrees: typing.Iterable[GeneralName] | None,
-        excluded_subtrees: typing.Iterable[GeneralName] | None,
+        permitted_subtrees: Iterable[GeneralName] | None,
+        excluded_subtrees: Iterable[GeneralName] | None,
     ) -> None:
         if permitted_subtrees is not None:
             permitted_subtrees = list(permitted_subtrees)
@@ -1303,11 +1385,11 @@ class NameConstraints(ExtensionType):
             and self.permitted_subtrees == other.permitted_subtrees
         )
 
-    def _validate_tree(self, tree: typing.Iterable[GeneralName]) -> None:
+    def _validate_tree(self, tree: Iterable[GeneralName]) -> None:
         self._validate_ip_name(tree)
         self._validate_dns_name(tree)
 
-    def _validate_ip_name(self, tree: typing.Iterable[GeneralName]) -> None:
+    def _validate_ip_name(self, tree: Iterable[GeneralName]) -> None:
         if any(
             isinstance(name, IPAddress)
             and not isinstance(
@@ -1320,7 +1402,7 @@ class NameConstraints(ExtensionType):
                 " IPv6Network object"
             )
 
-    def _validate_dns_name(self, tree: typing.Iterable[GeneralName]) -> None:
+    def _validate_dns_name(self, tree: Iterable[GeneralName]) -> None:
         if any(
             isinstance(name, DNSName) and "*" in name.value for name in tree
         ):
@@ -1413,7 +1495,7 @@ class Extension(typing.Generic[ExtensionTypeVar]):
 
 
 class GeneralNames:
-    def __init__(self, general_names: typing.Iterable[GeneralName]) -> None:
+    def __init__(self, general_names: Iterable[GeneralName]) -> None:
         general_names = list(general_names)
         if not all(isinstance(x, GeneralName) for x in general_names):
             raise TypeError(
@@ -1431,32 +1513,29 @@ class GeneralNames:
         type: type[DNSName]
         | type[UniformResourceIdentifier]
         | type[RFC822Name],
-    ) -> list[str]:
-        ...
+    ) -> list[str]: ...
 
     @typing.overload
     def get_values_for_type(
         self,
         type: type[DirectoryName],
-    ) -> list[Name]:
-        ...
+    ) -> list[Name]: ...
 
     @typing.overload
     def get_values_for_type(
         self,
         type: type[RegisteredID],
-    ) -> list[ObjectIdentifier]:
-        ...
+    ) -> list[ObjectIdentifier]: ...
 
     @typing.overload
     def get_values_for_type(
         self, type: type[IPAddress]
-    ) -> list[_IPAddressTypes]:
-        ...
+    ) -> list[_IPAddressTypes]: ...
 
     @typing.overload
-    def get_values_for_type(self, type: type[OtherName]) -> list[OtherName]:
-        ...
+    def get_values_for_type(
+        self, type: type[OtherName]
+    ) -> list[OtherName]: ...
 
     def get_values_for_type(
         self,
@@ -1498,7 +1577,7 @@ class GeneralNames:
 class SubjectAlternativeName(ExtensionType):
     oid = ExtensionOID.SUBJECT_ALTERNATIVE_NAME
 
-    def __init__(self, general_names: typing.Iterable[GeneralName]) -> None:
+    def __init__(self, general_names: Iterable[GeneralName]) -> None:
         self._general_names = GeneralNames(general_names)
 
     __len__, __iter__, __getitem__ = _make_sequence_methods("_general_names")
@@ -1509,32 +1588,29 @@ class SubjectAlternativeName(ExtensionType):
         type: type[DNSName]
         | type[UniformResourceIdentifier]
         | type[RFC822Name],
-    ) -> list[str]:
-        ...
+    ) -> list[str]: ...
 
     @typing.overload
     def get_values_for_type(
         self,
         type: type[DirectoryName],
-    ) -> list[Name]:
-        ...
+    ) -> list[Name]: ...
 
     @typing.overload
     def get_values_for_type(
         self,
         type: type[RegisteredID],
-    ) -> list[ObjectIdentifier]:
-        ...
+    ) -> list[ObjectIdentifier]: ...
 
     @typing.overload
     def get_values_for_type(
         self, type: type[IPAddress]
-    ) -> list[_IPAddressTypes]:
-        ...
+    ) -> list[_IPAddressTypes]: ...
 
     @typing.overload
-    def get_values_for_type(self, type: type[OtherName]) -> list[OtherName]:
-        ...
+    def get_values_for_type(
+        self, type: type[OtherName]
+    ) -> list[OtherName]: ...
 
     def get_values_for_type(
         self,
@@ -1573,7 +1649,7 @@ class SubjectAlternativeName(ExtensionType):
 class IssuerAlternativeName(ExtensionType):
     oid = ExtensionOID.ISSUER_ALTERNATIVE_NAME
 
-    def __init__(self, general_names: typing.Iterable[GeneralName]) -> None:
+    def __init__(self, general_names: Iterable[GeneralName]) -> None:
         self._general_names = GeneralNames(general_names)
 
     __len__, __iter__, __getitem__ = _make_sequence_methods("_general_names")
@@ -1584,32 +1660,29 @@ class IssuerAlternativeName(ExtensionType):
         type: type[DNSName]
         | type[UniformResourceIdentifier]
         | type[RFC822Name],
-    ) -> list[str]:
-        ...
+    ) -> list[str]: ...
 
     @typing.overload
     def get_values_for_type(
         self,
         type: type[DirectoryName],
-    ) -> list[Name]:
-        ...
+    ) -> list[Name]: ...
 
     @typing.overload
     def get_values_for_type(
         self,
         type: type[RegisteredID],
-    ) -> list[ObjectIdentifier]:
-        ...
+    ) -> list[ObjectIdentifier]: ...
 
     @typing.overload
     def get_values_for_type(
         self, type: type[IPAddress]
-    ) -> list[_IPAddressTypes]:
-        ...
+    ) -> list[_IPAddressTypes]: ...
 
     @typing.overload
-    def get_values_for_type(self, type: type[OtherName]) -> list[OtherName]:
-        ...
+    def get_values_for_type(
+        self, type: type[OtherName]
+    ) -> list[OtherName]: ...
 
     def get_values_for_type(
         self,
@@ -1648,7 +1721,7 @@ class IssuerAlternativeName(ExtensionType):
 class CertificateIssuer(ExtensionType):
     oid = CRLEntryExtensionOID.CERTIFICATE_ISSUER
 
-    def __init__(self, general_names: typing.Iterable[GeneralName]) -> None:
+    def __init__(self, general_names: Iterable[GeneralName]) -> None:
         self._general_names = GeneralNames(general_names)
 
     __len__, __iter__, __getitem__ = _make_sequence_methods("_general_names")
@@ -1659,32 +1732,29 @@ class CertificateIssuer(ExtensionType):
         type: type[DNSName]
         | type[UniformResourceIdentifier]
         | type[RFC822Name],
-    ) -> list[str]:
-        ...
+    ) -> list[str]: ...
 
     @typing.overload
     def get_values_for_type(
         self,
         type: type[DirectoryName],
-    ) -> list[Name]:
-        ...
+    ) -> list[Name]: ...
 
     @typing.overload
     def get_values_for_type(
         self,
         type: type[RegisteredID],
-    ) -> list[ObjectIdentifier]:
-        ...
+    ) -> list[ObjectIdentifier]: ...
 
     @typing.overload
     def get_values_for_type(
         self, type: type[IPAddress]
-    ) -> list[_IPAddressTypes]:
-        ...
+    ) -> list[_IPAddressTypes]: ...
 
     @typing.overload
-    def get_values_for_type(self, type: type[OtherName]) -> list[OtherName]:
-        ...
+    def get_values_for_type(
+        self, type: type[OtherName]
+    ) -> list[OtherName]: ...
 
     def get_values_for_type(
         self,
@@ -1774,6 +1844,13 @@ class InvalidityDate(ExtensionType):
     def invalidity_date(self) -> datetime.datetime:
         return self._invalidity_date
 
+    @property
+    def invalidity_date_utc(self) -> datetime.datetime:
+        if self._invalidity_date.tzinfo is None:
+            return self._invalidity_date.replace(tzinfo=datetime.timezone.utc)
+        else:
+            return self._invalidity_date.astimezone(tz=datetime.timezone.utc)
+
     def public_bytes(self) -> bytes:
         return rust_x509.encode_extension_value(self)
 
@@ -1783,9 +1860,7 @@ class PrecertificateSignedCertificateTimestamps(ExtensionType):
 
     def __init__(
         self,
-        signed_certificate_timestamps: typing.Iterable[
-            SignedCertificateTimestamp
-        ],
+        signed_certificate_timestamps: Iterable[SignedCertificateTimestamp],
     ) -> None:
         signed_certificate_timestamps = list(signed_certificate_timestamps)
         if not all(
@@ -1826,9 +1901,7 @@ class SignedCertificateTimestamps(ExtensionType):
 
     def __init__(
         self,
-        signed_certificate_timestamps: typing.Iterable[
-            SignedCertificateTimestamp
-        ],
+        signed_certificate_timestamps: Iterable[SignedCertificateTimestamp],
     ) -> None:
         signed_certificate_timestamps = list(signed_certificate_timestamps)
         if not all(
@@ -1896,7 +1969,7 @@ class OCSPNonce(ExtensionType):
 class OCSPAcceptableResponses(ExtensionType):
     oid = OCSPExtensionOID.ACCEPTABLE_RESPONSES
 
-    def __init__(self, responses: typing.Iterable[ObjectIdentifier]) -> None:
+    def __init__(self, responses: Iterable[ObjectIdentifier]) -> None:
         responses = list(responses)
         if any(not isinstance(r, ObjectIdentifier) for r in responses):
             raise TypeError("All responses must be ObjectIdentifiers")
@@ -1915,7 +1988,7 @@ class OCSPAcceptableResponses(ExtensionType):
     def __repr__(self) -> str:
         return f"<OCSPAcceptableResponses(responses={self._responses})>"
 
-    def __iter__(self) -> typing.Iterator[ObjectIdentifier]:
+    def __iter__(self) -> Iterator[ObjectIdentifier]:
         return iter(self._responses)
 
     def public_bytes(self) -> bytes:
@@ -1927,7 +2000,7 @@ class IssuingDistributionPoint(ExtensionType):
 
     def __init__(
         self,
-        full_name: typing.Iterable[GeneralName] | None,
+        full_name: Iterable[GeneralName] | None,
         relative_name: RelativeDistinguishedName | None,
         only_contains_user_certs: bool,
         only_contains_ca_certs: bool,
@@ -1967,10 +2040,12 @@ class IssuingDistributionPoint(ExtensionType):
                 "must all be boolean."
             )
 
+        # Per RFC5280 Section 5.2.5, the Issuing Distribution Point extension
+        # in a CRL can have only one of onlyContainsUserCerts,
+        # onlyContainsCACerts, onlyContainsAttributeCerts set to TRUE.
         crl_constraints = [
             only_contains_user_certs,
             only_contains_ca_certs,
-            indirect_crl,
             only_contains_attribute_certs,
         ]
 
@@ -1978,7 +2053,7 @@ class IssuingDistributionPoint(ExtensionType):
             raise ValueError(
                 "Only one of the following can be set to True: "
                 "only_contains_user_certs, only_contains_ca_certs, "
-                "indirect_crl, only_contains_attribute_certs"
+                "only_contains_attribute_certs"
             )
 
         if not any(
@@ -2141,6 +2216,287 @@ class MSCertificateTemplate(ExtensionType):
         return rust_x509.encode_extension_value(self)
 
 
+class NamingAuthority:
+    def __init__(
+        self,
+        id: ObjectIdentifier | None,
+        url: str | None,
+        text: str | None,
+    ) -> None:
+        if id is not None and not isinstance(id, ObjectIdentifier):
+            raise TypeError("id must be an ObjectIdentifier")
+
+        if url is not None and not isinstance(url, str):
+            raise TypeError("url must be a str")
+
+        if text is not None and not isinstance(text, str):
+            raise TypeError("text must be a str")
+
+        self._id = id
+        self._url = url
+        self._text = text
+
+    @property
+    def id(self) -> ObjectIdentifier | None:
+        return self._id
+
+    @property
+    def url(self) -> str | None:
+        return self._url
+
+    @property
+    def text(self) -> str | None:
+        return self._text
+
+    def __repr__(self) -> str:
+        return (
+            f"<NamingAuthority("
+            f"id={self.id}, url={self.url}, text={self.text})>"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NamingAuthority):
+            return NotImplemented
+
+        return (
+            self.id == other.id
+            and self.url == other.url
+            and self.text == other.text
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.id,
+                self.url,
+                self.text,
+            )
+        )
+
+
+class ProfessionInfo:
+    def __init__(
+        self,
+        naming_authority: NamingAuthority | None,
+        profession_items: Iterable[str],
+        profession_oids: Iterable[ObjectIdentifier] | None,
+        registration_number: str | None,
+        add_profession_info: bytes | None,
+    ) -> None:
+        if naming_authority is not None and not isinstance(
+            naming_authority, NamingAuthority
+        ):
+            raise TypeError("naming_authority must be a NamingAuthority")
+
+        profession_items = list(profession_items)
+        if not all(isinstance(item, str) for item in profession_items):
+            raise TypeError(
+                "Every item in the profession_items list must be a str"
+            )
+
+        if profession_oids is not None:
+            profession_oids = list(profession_oids)
+            if not all(
+                isinstance(oid, ObjectIdentifier) for oid in profession_oids
+            ):
+                raise TypeError(
+                    "Every item in the profession_oids list must be an "
+                    "ObjectIdentifier"
+                )
+
+        if registration_number is not None and not isinstance(
+            registration_number, str
+        ):
+            raise TypeError("registration_number must be a str")
+
+        if add_profession_info is not None and not isinstance(
+            add_profession_info, bytes
+        ):
+            raise TypeError("add_profession_info must be bytes")
+
+        self._naming_authority = naming_authority
+        self._profession_items = profession_items
+        self._profession_oids = profession_oids
+        self._registration_number = registration_number
+        self._add_profession_info = add_profession_info
+
+    @property
+    def naming_authority(self) -> NamingAuthority | None:
+        return self._naming_authority
+
+    @property
+    def profession_items(self) -> list[str]:
+        return self._profession_items
+
+    @property
+    def profession_oids(self) -> list[ObjectIdentifier] | None:
+        return self._profession_oids
+
+    @property
+    def registration_number(self) -> str | None:
+        return self._registration_number
+
+    @property
+    def add_profession_info(self) -> bytes | None:
+        return self._add_profession_info
+
+    def __repr__(self) -> str:
+        return (
+            f"<ProfessionInfo(naming_authority={self.naming_authority}, "
+            f"profession_items={self.profession_items}, "
+            f"profession_oids={self.profession_oids}, "
+            f"registration_number={self.registration_number}, "
+            f"add_profession_info={self.add_profession_info!r})>"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ProfessionInfo):
+            return NotImplemented
+
+        return (
+            self.naming_authority == other.naming_authority
+            and self.profession_items == other.profession_items
+            and self.profession_oids == other.profession_oids
+            and self.registration_number == other.registration_number
+            and self.add_profession_info == other.add_profession_info
+        )
+
+    def __hash__(self) -> int:
+        if self.profession_oids is not None:
+            profession_oids = tuple(self.profession_oids)
+        else:
+            profession_oids = None
+        return hash(
+            (
+                self.naming_authority,
+                tuple(self.profession_items),
+                profession_oids,
+                self.registration_number,
+                self.add_profession_info,
+            )
+        )
+
+
+class Admission:
+    def __init__(
+        self,
+        admission_authority: GeneralName | None,
+        naming_authority: NamingAuthority | None,
+        profession_infos: Iterable[ProfessionInfo],
+    ) -> None:
+        if admission_authority is not None and not isinstance(
+            admission_authority, GeneralName
+        ):
+            raise TypeError("admission_authority must be a GeneralName")
+
+        if naming_authority is not None and not isinstance(
+            naming_authority, NamingAuthority
+        ):
+            raise TypeError("naming_authority must be a NamingAuthority")
+
+        profession_infos = list(profession_infos)
+        if not all(
+            isinstance(info, ProfessionInfo) for info in profession_infos
+        ):
+            raise TypeError(
+                "Every item in the profession_infos list must be a "
+                "ProfessionInfo"
+            )
+
+        self._admission_authority = admission_authority
+        self._naming_authority = naming_authority
+        self._profession_infos = profession_infos
+
+    @property
+    def admission_authority(self) -> GeneralName | None:
+        return self._admission_authority
+
+    @property
+    def naming_authority(self) -> NamingAuthority | None:
+        return self._naming_authority
+
+    @property
+    def profession_infos(self) -> list[ProfessionInfo]:
+        return self._profession_infos
+
+    def __repr__(self) -> str:
+        return (
+            f"<Admission(admission_authority={self.admission_authority}, "
+            f"naming_authority={self.naming_authority}, "
+            f"profession_infos={self.profession_infos})>"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Admission):
+            return NotImplemented
+
+        return (
+            self.admission_authority == other.admission_authority
+            and self.naming_authority == other.naming_authority
+            and self.profession_infos == other.profession_infos
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.admission_authority,
+                self.naming_authority,
+                tuple(self.profession_infos),
+            )
+        )
+
+
+class Admissions(ExtensionType):
+    oid = ExtensionOID.ADMISSIONS
+
+    def __init__(
+        self,
+        authority: GeneralName | None,
+        admissions: Iterable[Admission],
+    ) -> None:
+        if authority is not None and not isinstance(authority, GeneralName):
+            raise TypeError("authority must be a GeneralName")
+
+        admissions = list(admissions)
+        if not all(
+            isinstance(admission, Admission) for admission in admissions
+        ):
+            raise TypeError(
+                "Every item in the contents_of_admissions list must be an "
+                "Admission"
+            )
+
+        self._authority = authority
+        self._admissions = admissions
+
+    __len__, __iter__, __getitem__ = _make_sequence_methods("_admissions")
+
+    @property
+    def authority(self) -> GeneralName | None:
+        return self._authority
+
+    def __repr__(self) -> str:
+        return (
+            f"<Admissions(authority={self._authority}, "
+            f"admissions={self._admissions})>"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Admissions):
+            return NotImplemented
+
+        return (
+            self.authority == other.authority
+            and self._admissions == other._admissions
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.authority, tuple(self._admissions)))
+
+    def public_bytes(self) -> bytes:
+        return rust_x509.encode_extension_value(self)
+
+
 class UnrecognizedExtension(ExtensionType):
     def __init__(self, oid: ObjectIdentifier, value: bytes) -> None:
         if not isinstance(oid, ObjectIdentifier):
@@ -2157,10 +2513,7 @@ class UnrecognizedExtension(ExtensionType):
         return self._value
 
     def __repr__(self) -> str:
-        return (
-            f"<UnrecognizedExtension(oid={self.oid}, "
-            f"value={self.value!r})>"
-        )
+        return f"<UnrecognizedExtension(oid={self.oid}, value={self.value!r})>"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, UnrecognizedExtension):

@@ -198,8 +198,6 @@ def check_and_upload_local(
                     f"Uploading file: {content} failed",
                 )
             return True, file_url, cert
-        else:
-            raise InvalidInput(f"The file: {file_path} is not exists!")
     elif content.startswith("oss://"):
         return True, content, upload_certificate
     elif not content.startswith("http"):

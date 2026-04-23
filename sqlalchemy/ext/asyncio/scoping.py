@@ -1,5 +1,5 @@
 # ext/asyncio/scoping.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -38,7 +38,6 @@ if TYPE_CHECKING:
     from .result import AsyncScalarResult
     from .session import AsyncSessionTransaction
     from ...engine import Connection
-    from ...engine import CursorResult
     from ...engine import Engine
     from ...engine import Result
     from ...engine import Row
@@ -55,7 +54,6 @@ if TYPE_CHECKING:
     from ...orm.session import _PKIdentityArgument
     from ...orm.session import _SessionBind
     from ...sql.base import Executable
-    from ...sql.dml import UpdateBase
     from ...sql.elements import ClauseElement
     from ...sql.selectable import ForUpdateParameter
     from ...sql.selectable import TypedReturnsRows
@@ -364,7 +362,7 @@ class async_scoped_session(Generic[_AS]):
         object is entered::
 
             async with async_session.begin():
-                # .. ORM transaction is begun
+                ...  # ORM transaction is begun
 
         Note that database IO will not normally occur when the session-level
         transaction is begun, as database transactions begin on an
@@ -537,18 +535,6 @@ class async_scoped_session(Generic[_AS]):
         _parent_execute_state: Optional[Any] = None,
         _add_event: Optional[Any] = None,
     ) -> Result[_T]: ...
-
-    @overload
-    async def execute(
-        self,
-        statement: UpdateBase,
-        params: Optional[_CoreAnyExecuteParams] = None,
-        *,
-        execution_options: OrmExecuteOptionsParameter = util.EMPTY_DICT,
-        bind_arguments: Optional[_BindArguments] = None,
-        _parent_execute_state: Optional[Any] = None,
-        _add_event: Optional[Any] = None,
-    ) -> CursorResult[Any]: ...
 
     @overload
     async def execute(
@@ -808,28 +794,28 @@ class async_scoped_session(Generic[_AS]):
 
             # construct async engines w/ async drivers
             engines = {
-                'leader':create_async_engine("sqlite+aiosqlite:///leader.db"),
-                'other':create_async_engine("sqlite+aiosqlite:///other.db"),
-                'follower1':create_async_engine("sqlite+aiosqlite:///follower1.db"),
-                'follower2':create_async_engine("sqlite+aiosqlite:///follower2.db"),
+                "leader": create_async_engine("sqlite+aiosqlite:///leader.db"),
+                "other": create_async_engine("sqlite+aiosqlite:///other.db"),
+                "follower1": create_async_engine("sqlite+aiosqlite:///follower1.db"),
+                "follower2": create_async_engine("sqlite+aiosqlite:///follower2.db"),
             }
+
 
             class RoutingSession(Session):
                 def get_bind(self, mapper=None, clause=None, **kw):
                     # within get_bind(), return sync engines
                     if mapper and issubclass(mapper.class_, MyOtherClass):
-                        return engines['other'].sync_engine
+                        return engines["other"].sync_engine
                     elif self._flushing or isinstance(clause, (Update, Delete)):
-                        return engines['leader'].sync_engine
+                        return engines["leader"].sync_engine
                     else:
                         return engines[
-                            random.choice(['follower1','follower2'])
+                            random.choice(["follower1", "follower2"])
                         ].sync_engine
 
+
             # apply to AsyncSession using sync_session_class
-            AsyncSessionMaker = async_sessionmaker(
-                sync_session_class=RoutingSession
-            )
+            AsyncSessionMaker = async_sessionmaker(sync_session_class=RoutingSession)
 
         The :meth:`_orm.Session.get_bind` method is called in a non-asyncio,
         implicitly non-blocking context in the same manner as ORM event hooks
@@ -1175,8 +1161,7 @@ class async_scoped_session(Generic[_AS]):
             Proxied for the :class:`_asyncio.AsyncSession` class on
             behalf of the :class:`_asyncio.scoping.async_scoped_session` class.
 
-        Raises ``sqlalchemy.orm.exc.NoResultFound`` if the query selects
-        no rows.
+        Raises :class:`_exc.NoResultFound` if the query selects no rows.
 
         ..versionadded: 2.0.22
 

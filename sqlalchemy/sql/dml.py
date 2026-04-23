@@ -1,5 +1,5 @@
 # sql/dml.py
-# Copyright (C) 2009-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2009-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -23,6 +23,7 @@ from typing import NoReturn
 from typing import Optional
 from typing import overload
 from typing import Sequence
+from typing import Set
 from typing import Tuple
 from typing import Type
 from typing import TYPE_CHECKING
@@ -42,6 +43,7 @@ from .base import _from_objects
 from .base import _generative
 from .base import _select_iterables
 from .base import ColumnCollection
+from .base import ColumnSet
 from .base import CompileState
 from .base import DialectKWArgs
 from .base import Executable
@@ -418,13 +420,32 @@ class UpdateBase(
     is_dml = True
 
     def _generate_fromclause_column_proxies(
-        self, fromclause: FromClause
+        self,
+        fromclause: FromClause,
+        columns: ColumnCollection[str, KeyedColumnElement[Any]],
+        primary_key: ColumnSet,
+        foreign_keys: Set[KeyedColumnElement[Any]],
     ) -> None:
-        fromclause._columns._populate_separate_keys(
-            col._make_proxy(fromclause)
-            for col in self._all_selected_columns
-            if is_column_element(col)
-        )
+        prox = [
+            c._make_proxy(
+                fromclause,
+                key=proxy_key,
+                name=required_label_name,
+                name_is_truncatable=True,
+                primary_key=primary_key,
+                foreign_keys=foreign_keys,
+            )
+            for (
+                required_label_name,
+                proxy_key,
+                fallback_label_name,
+                c,
+                repeated,
+            ) in (self._generate_columns_plus_names(False))
+            if is_column_element(c)
+        ]
+
+        columns._populate_separate_keys(prox)
 
     def params(self, *arg: Any, **kw: Any) -> NoReturn:
         """Set the parameters for the statement.
@@ -471,7 +492,7 @@ class UpdateBase(
 
             The :meth:`.UpdateBase.return_defaults` method is used by the ORM
             for its internal work in fetching newly generated primary key
-            and server default values, in particular to provide the underyling
+            and server default values, in particular to provide the underlying
             implementation of the :paramref:`_orm.Mapper.eager_defaults`
             ORM feature as well as to allow RETURNING support with bulk
             ORM inserts.  Its behavior is fairly idiosyncratic
@@ -525,11 +546,11 @@ class UpdateBase(
 
         E.g.::
 
-            stmt = table.insert().values(data='newdata').return_defaults()
+            stmt = table.insert().values(data="newdata").return_defaults()
 
             result = connection.execute(stmt)
 
-            server_created_at = result.returned_defaults['created_at']
+            server_created_at = result.returned_defaults["created_at"]
 
         When used against an UPDATE statement
         :meth:`.UpdateBase.return_defaults` instead looks for columns that
@@ -686,6 +707,16 @@ class UpdateBase(
                 )
 
         return self
+
+    def is_derived_from(self, fromclause: Optional[FromClause]) -> bool:
+        """Return ``True`` if this :class:`.ReturnsRows` is
+        'derived' from the given :class:`.FromClause`.
+
+        Since these are DMLs, we dont want such statements ever being adapted
+        so we return False for derives.
+
+        """
+        return False
 
     @_generative
     def returning(
@@ -1032,7 +1063,7 @@ class ValuesBase(UpdateBase):
 
                 users.insert().values(name="some name")
 
-                users.update().where(users.c.id==5).values(name="some name")
+                users.update().where(users.c.id == 5).values(name="some name")
 
         :param \*args: As an alternative to passing key/value parameters,
          a dictionary, tuple, or list of dictionaries or tuples can be passed
@@ -1062,13 +1093,17 @@ class ValuesBase(UpdateBase):
          this syntax is supported on backends such as SQLite, PostgreSQL,
          MySQL, but not necessarily others::
 
-            users.insert().values([
-                                {"name": "some name"},
-                                {"name": "some other name"},
-                                {"name": "yet another name"},
-                            ])
+            users.insert().values(
+                [
+                    {"name": "some name"},
+                    {"name": "some other name"},
+                    {"name": "yet another name"},
+                ]
+            )
 
-         The above form would render a multiple VALUES statement similar to::
+         The above form would render a multiple VALUES statement similar to:
+
+         .. sourcecode:: sql
 
                 INSERT INTO users (name) VALUES
                                 (:name_1),
@@ -1089,6 +1124,9 @@ class ValuesBase(UpdateBase):
                :ref:`tutorial_multiple_parameters` - an introduction to
                the traditional Core method of multiple parameter set
                invocation for INSERTs and other statements.
+
+               :ref:`tutorial_core_insert_values_clause` - Insert tutorial
+               detailing alternatives to the multiple values syntax.
 
           The UPDATE construct also supports rendering the SET parameters
           in a specific order.  For this feature refer to the
@@ -1246,7 +1284,7 @@ class Insert(ValuesBase):
         e.g.::
 
             sel = select(table1.c.a, table1.c.b).where(table1.c.c > 5)
-            ins = table2.insert().from_select(['a', 'b'], sel)
+            ins = table2.insert().from_select(["a", "b"], sel)
 
         :param names: a sequence of string column names or
          :class:`_schema.Column`
@@ -1535,9 +1573,7 @@ class Update(DMLWhereBase, ValuesBase):
 
         E.g.::
 
-            stmt = table.update().ordered_values(
-                ("name", "ed"), ("ident", "foo")
-            )
+            stmt = table.update().ordered_values(("name", "ed"), ("ident", "foo"))
 
         .. seealso::
 
@@ -1550,7 +1586,7 @@ class Update(DMLWhereBase, ValuesBase):
            :paramref:`_expression.update.preserve_parameter_order`
            parameter, which will be removed in SQLAlchemy 2.0.
 
-        """
+        """  # noqa: E501
         if self._values:
             raise exc.ArgumentError(
                 "This statement already has values present"

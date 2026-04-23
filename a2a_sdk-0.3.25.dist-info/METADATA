@@ -1,0 +1,187 @@
+Metadata-Version: 2.4
+Name: a2a-sdk
+Version: 0.3.25
+Summary: A2A Python SDK
+Project-URL: homepage, https://a2a-protocol.org/
+Project-URL: repository, https://github.com/a2aproject/a2a-python
+Project-URL: changelog, https://github.com/a2aproject/a2a-python/blob/main/CHANGELOG.md
+Project-URL: documentation, https://a2a-protocol.org/latest/sdk/python/
+Author-email: Google LLC <googleapis-packages@google.com>
+License-Expression: Apache-2.0
+License-File: LICENSE
+Keywords: A2A,A2A Protocol,A2A SDK,Agent 2 Agent,Agent2Agent
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.10
+Requires-Dist: google-api-core>=1.26.0
+Requires-Dist: httpx-sse>=0.4.0
+Requires-Dist: httpx>=0.28.1
+Requires-Dist: protobuf>=5.29.5
+Requires-Dist: pydantic>=2.11.3
+Provides-Extra: all
+Requires-Dist: cryptography>=43.0.0; extra == 'all'
+Requires-Dist: fastapi>=0.115.2; extra == 'all'
+Requires-Dist: google-cloud-aiplatform>=1.140.0; extra == 'all'
+Requires-Dist: grpcio-reflection>=1.7.0; extra == 'all'
+Requires-Dist: grpcio-tools>=1.60; extra == 'all'
+Requires-Dist: grpcio>=1.60; extra == 'all'
+Requires-Dist: opentelemetry-api>=1.33.0; extra == 'all'
+Requires-Dist: opentelemetry-sdk>=1.33.0; extra == 'all'
+Requires-Dist: pyjwt>=2.0.0; extra == 'all'
+Requires-Dist: sqlalchemy[aiomysql,asyncio]>=2.0.0; extra == 'all'
+Requires-Dist: sqlalchemy[aiosqlite,asyncio]>=2.0.0; extra == 'all'
+Requires-Dist: sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0; extra == 'all'
+Requires-Dist: sse-starlette; extra == 'all'
+Requires-Dist: starlette; extra == 'all'
+Provides-Extra: encryption
+Requires-Dist: cryptography>=43.0.0; extra == 'encryption'
+Provides-Extra: grpc
+Requires-Dist: grpcio-reflection>=1.7.0; extra == 'grpc'
+Requires-Dist: grpcio-tools>=1.60; extra == 'grpc'
+Requires-Dist: grpcio>=1.60; extra == 'grpc'
+Provides-Extra: http-server
+Requires-Dist: fastapi>=0.115.2; extra == 'http-server'
+Requires-Dist: sse-starlette; extra == 'http-server'
+Requires-Dist: starlette; extra == 'http-server'
+Provides-Extra: mysql
+Requires-Dist: sqlalchemy[aiomysql,asyncio]>=2.0.0; extra == 'mysql'
+Provides-Extra: postgresql
+Requires-Dist: sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0; extra == 'postgresql'
+Provides-Extra: signing
+Requires-Dist: pyjwt>=2.0.0; extra == 'signing'
+Provides-Extra: sql
+Requires-Dist: sqlalchemy[aiomysql,asyncio]>=2.0.0; extra == 'sql'
+Requires-Dist: sqlalchemy[aiosqlite,asyncio]>=2.0.0; extra == 'sql'
+Requires-Dist: sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0; extra == 'sql'
+Provides-Extra: sqlite
+Requires-Dist: sqlalchemy[aiosqlite,asyncio]>=2.0.0; extra == 'sqlite'
+Provides-Extra: telemetry
+Requires-Dist: opentelemetry-api>=1.33.0; extra == 'telemetry'
+Requires-Dist: opentelemetry-sdk>=1.33.0; extra == 'telemetry'
+Provides-Extra: vertex
+Requires-Dist: google-cloud-aiplatform>=1.140.0; extra == 'vertex'
+Description-Content-Type: text/markdown
+
+# A2A Python SDK
+
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/a2a-sdk)](https://pypi.org/project/a2a-sdk/)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/a2a-sdk)
+[![PyPI - Downloads](https://img.shields.io/pypi/dw/a2a-sdk)](https://pypistats.org/packages/a2a-sdk)
+[![Python Unit Tests](https://github.com/a2aproject/a2a-python/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/a2aproject/a2a-python/actions/workflows/unit-tests.yml)
+<!-- markdownlint-disable no-inline-html -->
+<a href="https://codewiki.google/github.com/a2aproject/a2a-python">
+  <img src="https://www.gstatic.com/_/boq-sdlc-agents-ui/_/r/Mvosg4klCA4.svg" alt="Ask Code Wiki" height="20">
+</a>
+
+<div align="center">
+   <img src="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/docs/assets/a2a-logo-black.svg" width="256" alt="A2A Logo"/>
+   <h3>
+      A Python library for running agentic applications as A2A Servers, following the <a href="https://a2a-protocol.org">Agent2Agent (A2A) Protocol</a>.
+   </h3>
+</div>
+
+<!-- markdownlint-enable no-inline-html -->
+
+---
+
+## ✨ Features
+
+- **A2A Protocol Compliant:** Build agentic applications that adhere to the Agent2Agent (A2A) Protocol.
+- **Extensible:** Easily add support for different communication protocols and database backends.
+- **Asynchronous:** Built on modern async Python for high performance.
+- **Optional Integrations:** Includes optional support for:
+  - HTTP servers ([FastAPI](https://fastapi.tiangolo.com/), [Starlette](https://www.starlette.io/))
+  - [gRPC](https://grpc.io/)
+  - [OpenTelemetry](https://opentelemetry.io/) for tracing
+  - SQL databases ([PostgreSQL](https://www.postgresql.org/), [MySQL](https://www.mysql.com/), [SQLite](https://sqlite.org/))
+
+---
+
+## 🧩 Compatibility
+
+This SDK implements the A2A Protocol Specification [`v0.3.0`](https://a2a-protocol.org/v0.3.0/specification).
+
+| Transport | Client | Server |
+| :--- | :---: | :---: |
+| **JSON-RPC** | ✅ | ✅ |
+| **HTTP+JSON/REST** | ✅ | ✅ |
+| **GRPC** | ✅ | ✅ |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Python 3.10+
+- `uv` (recommended) or `pip`
+
+### 🔧 Installation
+
+Install the core SDK and any desired extras using your preferred package manager.
+
+| Feature                  | `uv` Command                               | `pip` Command                                |
+| ------------------------ | ------------------------------------------ | -------------------------------------------- |
+| **Core SDK**             | `uv add a2a-sdk`                           | `pip install a2a-sdk`                        |
+| **All Extras**           | `uv add "a2a-sdk[all]"`                    | `pip install "a2a-sdk[all]"`                 |
+| **HTTP Server**          | `uv add "a2a-sdk[http-server]"`            | `pip install "a2a-sdk[http-server]"`         |
+| **gRPC Support**         | `uv add "a2a-sdk[grpc]"`                   | `pip install "a2a-sdk[grpc]"`                |
+| **OpenTelemetry Tracing**| `uv add "a2a-sdk[telemetry]"`              | `pip install "a2a-sdk[telemetry]"`           |
+| **Encryption**           | `uv add "a2a-sdk[encryption]"`             | `pip install "a2a-sdk[encryption]"`          |
+|                          |                                            |                                              |
+| **Database Drivers**     |                                            |                                              |
+| **PostgreSQL**           | `uv add "a2a-sdk[postgresql]"`             | `pip install "a2a-sdk[postgresql]"`          |
+| **MySQL**                | `uv add "a2a-sdk[mysql]"`                  | `pip install "a2a-sdk[mysql]"`               |
+| **SQLite**               | `uv add "a2a-sdk[sqlite]"`                 | `pip install "a2a-sdk[sqlite]"`              |
+| **All SQL Drivers**      | `uv add "a2a-sdk[sql]"`                    | `pip install "a2a-sdk[sql]"`                 |
+
+## Examples
+
+### [Helloworld Example](https://github.com/a2aproject/a2a-samples/tree/main/samples/python/agents/helloworld)
+
+1. Run Remote Agent
+
+   ```bash
+   git clone https://github.com/a2aproject/a2a-samples.git
+   cd a2a-samples/samples/python/agents/helloworld
+   uv run .
+   ```
+
+2. In another terminal, run the client
+
+   ```bash
+   cd a2a-samples/samples/python/agents/helloworld
+   uv run test_client.py
+   ```
+
+3. You can validate your agent using the agent inspector. Follow the instructions at the [a2a-inspector](https://github.com/a2aproject/a2a-inspector) repo.
+
+---
+
+## 🌐 More Examples
+
+You can find a variety of more detailed examples in the [a2a-samples](https://github.com/a2aproject/a2a-samples) repository:
+
+- **[Python Examples](https://github.com/a2aproject/a2a-samples/tree/main/samples/python)**
+- **[JavaScript Examples](https://github.com/a2aproject/a2a-samples/tree/main/samples/js)**
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines on how to get involved.
+
+---
+
+## 📄 License
+
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for more details.

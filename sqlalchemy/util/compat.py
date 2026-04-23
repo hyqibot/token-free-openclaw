@@ -1,5 +1,5 @@
 # util/compat.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
@@ -17,9 +17,11 @@ import inspect
 import operator
 import platform
 import sys
+import sysconfig
 import typing
 from typing import Any
 from typing import Callable
+from typing import cast
 from typing import Dict
 from typing import Iterable
 from typing import List
@@ -32,6 +34,9 @@ from typing import Type
 from typing import TypeVar
 
 
+py314b1 = sys.version_info >= (3, 14, 0, "beta", 1)
+py314 = sys.version_info >= (3, 14)
+py313 = sys.version_info >= (3, 13)
 py312 = sys.version_info >= (3, 12)
 py311 = sys.version_info >= (3, 11)
 py310 = sys.version_info >= (3, 10)
@@ -39,6 +44,7 @@ py39 = sys.version_info >= (3, 9)
 py38 = sys.version_info >= (3, 8)
 pypy = platform.python_implementation() == "PyPy"
 cpython = platform.python_implementation() == "CPython"
+freethreading = bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
 
 win32 = sys.platform.startswith("win")
 osx = sys.platform.startswith("darwin")
@@ -52,14 +58,118 @@ dottedgetter = operator.attrgetter
 _T_co = TypeVar("_T_co", covariant=True)
 
 
+if py314:
+    # vendor a minimal form of get_annotations per
+    # https://github.com/python/cpython/issues/133684#issuecomment-2863841891
+
+    from annotationlib import call_annotate_function  # type: ignore[import-not-found,unused-ignore]  # noqa: E501
+    from annotationlib import Format
+
+    def _get_and_call_annotate(obj, format):  # noqa: A002
+        annotate = getattr(obj, "__annotate__", None)
+        if annotate is not None:
+            ann = call_annotate_function(annotate, format, owner=obj)
+            if not isinstance(ann, dict):
+                raise ValueError(f"{obj!r}.__annotate__ returned a non-dict")
+            return ann
+        return None
+
+    # this is ported from py3.13.0a7
+    _BASE_GET_ANNOTATIONS = type.__dict__["__annotations__"].__get__
+
+    def _get_dunder_annotations(obj):
+        if isinstance(obj, type):
+            try:
+                ann = _BASE_GET_ANNOTATIONS(obj)
+            except AttributeError:
+                # For static types, the descriptor raises AttributeError.
+                return {}
+        else:
+            ann = getattr(obj, "__annotations__", None)
+            if ann is None:
+                return {}
+
+        if not isinstance(ann, dict):
+            raise ValueError(
+                f"{obj!r}.__annotations__ is neither a dict nor None"
+            )
+        return dict(ann)
+
+    def _vendored_get_annotations(
+        obj: Any, *, format: Format  # noqa: A002
+    ) -> Mapping[str, Any]:
+        """A sparse implementation of annotationlib.get_annotations()"""
+
+        try:
+            ann = _get_dunder_annotations(obj)
+        except Exception:
+            pass
+        else:
+            if ann is not None:
+                return dict(ann)
+
+        # But if __annotations__ threw a NameError, we try calling __annotate__
+        ann = _get_and_call_annotate(obj, format)
+        if ann is None:
+            # If that didn't work either, we have a very weird object:
+            # evaluating
+            # __annotations__ threw NameError and there is no __annotate__.
+            # In that case,
+            # we fall back to trying __annotations__ again.
+            ann = _get_dunder_annotations(obj)
+
+        if ann is None:
+            if isinstance(obj, type) or callable(obj):
+                return {}
+            raise TypeError(f"{obj!r} does not have annotations")
+
+        if not ann:
+            return {}
+
+        return dict(ann)
+
+    def get_annotations(obj: Any) -> Mapping[str, Any]:
+        # FORWARDREF has the effect of giving us ForwardRefs and not
+        # actually trying to evaluate the annotations.  We need this so
+        # that the annotations act as much like
+        # "from __future__ import annotations" as possible, which is going
+        # away in future python as a separate mode
+        return _vendored_get_annotations(obj, format=Format.FORWARDREF)
+
+elif py310:
+
+    def get_annotations(obj: Any) -> Mapping[str, Any]:
+        return inspect.get_annotations(obj)
+
+else:
+
+    def get_annotations(obj: Any) -> Mapping[str, Any]:
+        # it's been observed that cls.__annotations__ can be non present.
+        # it's not clear what causes this, running under tox py37/38 it
+        # happens, running straight pytest it doesnt
+
+        # https://docs.python.org/3/howto/annotations.html#annotations-howto
+        if isinstance(obj, type):
+            ann = obj.__dict__.get("__annotations__", None)
+        else:
+            ann = getattr(obj, "__annotations__", None)
+
+        from . import _collections
+
+        if ann is None:
+            return _collections.EMPTY_DICT
+        else:
+            return cast("Mapping[str, Any]", ann)
+
+
 class FullArgSpec(typing.NamedTuple):
     args: List[str]
     varargs: Optional[str]
     varkw: Optional[str]
     defaults: Optional[Tuple[Any, ...]]
     kwonlyargs: List[str]
-    kwonlydefaults: Dict[str, Any]
-    annotations: Dict[str, Any]
+    kwonlydefaults: Optional[Dict[str, Any]]
+    annotations: Mapping[str, Any]
 
 
 def inspect_getfullargspec(func: Callable[..., Any]) -> FullArgSpec:
@@ -96,7 +206,7 @@ def inspect_getfullargspec(func: Callable[..., Any]) -> FullArgSpec:
         func.__defaults__,
         kwonlyargs,
         func.__kwdefaults__,
-        func.__annotations__,
+        get_annotations(func),
     )
 
 
@@ -298,3 +408,14 @@ def local_dataclass_fields(cls: Type[Any]) -> Iterable[dataclasses.Field[Any]]:
         return [f for f in dataclasses.fields(cls) if f not in super_fields]
     else:
         return []
+
+
+if freethreading:
+    import threading
+
+    mini_gil = threading.RLock()
+    """provide a threading.RLock() under python freethreading only"""
+else:
+    import contextlib
+
+    mini_gil = contextlib.nullcontext()  # type: ignore[assignment]

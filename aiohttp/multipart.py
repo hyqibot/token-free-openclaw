@@ -11,6 +11,7 @@ from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
+    AsyncIterator,
     Deque,
     Dict,
     Iterator,
@@ -40,6 +41,7 @@ from .hdrs import (
 )
 from .helpers import CHAR, TOKEN, parse_mimetype, reify
 from .http import HeadersParser
+from .http_exceptions import BadHttpMessage
 from .log import internal_logger
 from .payload import (
     JsonPayload,
@@ -325,7 +327,10 @@ class BodyPartReader:
         while not self._at_eof:
             data.extend(await self.read_chunk(self.chunk_size))
         if decode:
-            return await self.decode(data)
+            decoded_data = bytearray()
+            async for d in self.decode_iter(data):
+                decoded_data.extend(d)
+            return decoded_data
         return data
 
     async def read_chunk(self, size: int = chunk_size) -> bytes:
@@ -503,30 +508,71 @@ class BodyPartReader:
         """Returns True if the boundary was reached or False otherwise."""
         return self._at_eof
 
-    async def decode(self, data: bytes) -> bytes:
-        """Decodes data.
-
-        Decoding is done according the specified Content-Encoding
-        or Content-Transfer-Encoding headers value.
-        """
+    def _apply_content_transfer_decoding(self, data: bytes) -> bytes:
+        """Apply Content-Transfer-Encoding decoding if header is present."""
         if CONTENT_TRANSFER_ENCODING in self.headers:
-            data = self._decode_content_transfer(data)
-        # https://datatracker.ietf.org/doc/html/rfc7578#section-4.8
-        if not self._is_form_data and CONTENT_ENCODING in self.headers:
-            return await self._decode_content(data)
+            return self._decode_content_transfer(data)
         return data
 
-    async def _decode_content(self, data: bytes) -> bytes:
+    def _needs_content_decoding(self) -> bool:
+        """Check if Content-Encoding decoding should be applied."""
+        # https://datatracker.ietf.org/doc/html/rfc7578#section-4.8
+        return not self._is_form_data and CONTENT_ENCODING in self.headers
+
+    def decode(self, data: bytes) -> bytes:
+        """Decodes data synchronously.
+
+        Decodes data according the specified Content-Encoding
+        or Content-Transfer-Encoding headers value.
+
+        Note: For large payloads, consider using decode_iter() instead
+        to avoid blocking the event loop during decompression.
+        """
+        data = self._apply_content_transfer_decoding(data)
+        if self._needs_content_decoding():
+            return self._decode_content(data)
+        return data
+
+    async def decode_iter(self, data: bytes) -> AsyncIterator[bytes]:
+        """Async generator that yields decoded data chunks.
+
+        Decodes data according the specified Content-Encoding
+        or Content-Transfer-Encoding headers value.
+
+        This method offloads decompression to an executor for large payloads
+        to avoid blocking the event loop.
+        """
+        data = self._apply_content_transfer_decoding(data)
+        if self._needs_content_decoding():
+            async for d in self._decode_content_async(data):
+                yield d
+        else:
+            yield data
+
+    def _decode_content(self, data: bytes) -> bytes:
         encoding = self.headers.get(CONTENT_ENCODING, "").lower()
         if encoding == "identity":
             return data
         if encoding in {"deflate", "gzip"}:
-            return await ZLibDecompressor(
+            return ZLibDecompressor(
                 encoding=encoding,
                 suppress_deflate_header=True,
-            ).decompress(data, max_length=self._max_decompress_size)
+            ).decompress_sync(data, max_length=self._max_decompress_size)
 
         raise RuntimeError(f"unknown content encoding: {encoding}")
+
+    async def _decode_content_async(self, data: bytes) -> AsyncIterator[bytes]:
+        encoding = self.headers.get(CONTENT_ENCODING, "").lower()
+        if encoding == "identity":
+            yield data
+        elif encoding in {"deflate", "gzip"}:
+            d = ZLibDecompressor(
+                encoding=encoding,
+                suppress_deflate_header=True,
+            )
+            yield await d.decompress(data, max_length=self._max_decompress_size)
+        else:
+            raise RuntimeError(f"unknown content encoding: {encoding}")
 
     def _decode_content_transfer(self, data: bytes) -> bytes:
         encoding = self.headers.get(CONTENT_TRANSFER_ENCODING, "").lower()
@@ -597,10 +643,9 @@ class BodyPartReaderPayload(Payload):
 
     async def write(self, writer: AbstractStreamWriter) -> None:
         field = self._value
-        chunk = await field.read_chunk(size=2**16)
-        while chunk:
-            await writer.write(await field.decode(chunk))
-            chunk = await field.read_chunk(size=2**16)
+        while chunk := await field.read_chunk(size=2**18):
+            async for d in field.decode_iter(chunk):
+                await writer.write(d)
 
 
 class MultipartReader:
@@ -614,7 +659,14 @@ class MultipartReader:
     #: Body part reader class for non multipart/* content types.
     part_reader_cls = BodyPartReader
 
-    def __init__(self, headers: Mapping[str, str], content: StreamReader) -> None:
+    def __init__(
+        self,
+        headers: Mapping[str, str],
+        content: StreamReader,
+        *,
+        max_field_size: int = 8190,
+        max_headers: int = 128,
+    ) -> None:
         self._mimetype = parse_mimetype(headers[CONTENT_TYPE])
         assert self._mimetype.type == "multipart", "multipart/* content type expected"
         if "boundary" not in self._mimetype.parameters:
@@ -625,8 +677,10 @@ class MultipartReader:
         self.headers = headers
         self._boundary = ("--" + self._get_boundary()).encode()
         self._content = content
-        self._default_charset: Optional[str] = None
-        self._last_part: Optional[Union["MultipartReader", BodyPartReader]] = None
+        self._default_charset: str | None = None
+        self._last_part: MultipartReader | BodyPartReader | None = None
+        self._max_field_size = max_field_size
+        self._max_headers = max_headers
         self._at_eof = False
         self._at_bof = True
         self._unread: List[bytes] = []
@@ -726,7 +780,12 @@ class MultipartReader:
         if mimetype.type == "multipart":
             if self.multipart_reader_cls is None:
                 return type(self)(headers, self._content)
-            return self.multipart_reader_cls(headers, self._content)
+            return self.multipart_reader_cls(
+                headers,
+                self._content,
+                max_field_size=self._max_field_size,
+                max_headers=self._max_headers,
+            )
         else:
             return self.part_reader_cls(
                 self._boundary,
@@ -788,12 +847,14 @@ class MultipartReader:
     async def _read_headers(self) -> "CIMultiDictProxy[str]":
         lines = []
         while True:
-            chunk = await self._content.readline()
+            chunk = await self._content.readline(max_line_length=self._max_field_size)
             chunk = chunk.rstrip(b"\r\n")
             lines.append(chunk)
             if not chunk:
                 break
-        parser = HeadersParser()
+            if len(lines) > self._max_headers:
+                raise BadHttpMessage("Too many headers received")
+        parser = HeadersParser(max_field_size=self._max_field_size)
         headers, raw_headers = parser.parse_headers(lines)
         return headers
 

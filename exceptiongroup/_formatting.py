@@ -215,7 +215,7 @@ class PatchedTracebackException(traceback.TracebackException):
                 if exceptions:
                     queue.extend(zip(te.exceptions, e.exceptions))
 
-    def format(self, *, chain=True, _ctx=None):
+    def format(self, *, chain=True, _ctx=None, **kwargs):
         if _ctx is None:
             _ctx = _ExceptionPrintContext()
 
@@ -241,7 +241,7 @@ class PatchedTracebackException(traceback.TracebackException):
         for msg, exc in reversed(output):
             if msg is not None:
                 yield from _ctx.emit(msg)
-            if exc.exceptions is None:
+            if getattr(exc, "exceptions", None) is None:
                 if exc.stack:
                     yield from _ctx.emit("Traceback (most recent call last):\n")
                     yield from _ctx.emit(exc.stack.format())
@@ -304,7 +304,7 @@ class PatchedTracebackException(traceback.TracebackException):
                     assert _ctx.exception_group_depth == 1
                     _ctx.exception_group_depth = 0
 
-    def format_exception_only(self):
+    def format_exception_only(self, **kwargs):
         """Format the exception part of the traceback.
         The return value is a generator of strings, each ending in a newline.
         Normally, the generator emits a single string; however, for
@@ -332,12 +332,13 @@ class PatchedTracebackException(traceback.TracebackException):
         else:
             yield from traceback_exception_original_format_exception_only(self)
 
-        if isinstance(self.__notes__, collections.abc.Sequence):
-            for note in self.__notes__:
+        notes = getattr(self, "__notes__", None)
+        if isinstance(notes, collections.abc.Sequence):
+            for note in notes:
                 note = _safe_string(note, "note")
                 yield from [line + "\n" for line in note.split("\n")]
-        elif self.__notes__ is not None:
-            yield _safe_string(self.__notes__, "__notes__", func=repr)
+        elif notes is not None:
+            yield _safe_string(notes, "__notes__", func=repr)
 
 
 traceback_exception_original_format = traceback.TracebackException.format
@@ -391,8 +392,6 @@ if getattr(sys.excepthook, "__name__", None) in (
 
     import apport_python_hook
 
-    assert sys.excepthook is apport_python_hook.apport_excepthook
-
     # monkeypatch the sys module that apport has imported
     fake_sys = ModuleType("exceptiongroup_fake_sys")
     fake_sys.__dict__.update(sys.__dict__)
@@ -401,7 +400,7 @@ if getattr(sys.excepthook, "__name__", None) in (
 
 
 @singledispatch
-def format_exception_only(__exc: BaseException) -> List[str]:
+def format_exception_only(__exc: BaseException, **kwargs: Any) -> List[str]:
     return list(
         PatchedTracebackException(
             type(__exc), __exc, None, compact=True
@@ -410,15 +409,13 @@ def format_exception_only(__exc: BaseException) -> List[str]:
 
 
 @format_exception_only.register
-def _(__exc: type, value: BaseException) -> List[str]:
+def _(__exc: type, value: BaseException, **kwargs: Any) -> List[str]:
     return format_exception_only(value)
 
 
 @singledispatch
 def format_exception(
-    __exc: BaseException,
-    limit: Optional[int] = None,
-    chain: bool = True,
+    __exc: BaseException, limit: Optional[int] = None, chain: bool = True, **kwargs: Any
 ) -> List[str]:
     return list(
         PatchedTracebackException(
@@ -434,6 +431,7 @@ def _(
     tb: TracebackType,
     limit: Optional[int] = None,
     chain: bool = True,
+    **kwargs: Any,
 ) -> List[str]:
     return format_exception(value, limit, chain)
 
@@ -444,6 +442,7 @@ def print_exception(
     limit: Optional[int] = None,
     file: Any = None,
     chain: bool = True,
+    **kwargs: Any,
 ) -> None:
     if file is None:
         file = sys.stderr

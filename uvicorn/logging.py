@@ -16,7 +16,7 @@ class ColourizedFormatter(logging.Formatter):
     A custom log formatter class that:
 
     * Outputs the LOG_LEVEL with an appropriate color.
-    * If a log call includes an `extras={"color_message": ...}` it will be used
+    * If a log call includes an `extra={"color_message": ...}` it will be used
       for formatting the output, instead of the plain text message.
     """
 
@@ -55,13 +55,13 @@ class ColourizedFormatter(logging.Formatter):
     def formatMessage(self, record: logging.LogRecord) -> str:
         recordcopy = copy(record)
         levelname = recordcopy.levelname
-        seperator = " " * (8 - len(recordcopy.levelname))
+        separator = " " * (8 - len(recordcopy.levelname))
         if self.use_colors:
             levelname = self.color_level_name(levelname, recordcopy.levelno)
             if "color_message" in recordcopy.__dict__:
                 recordcopy.msg = recordcopy.__dict__["color_message"]
                 recordcopy.__dict__["message"] = recordcopy.getMessage()
-        recordcopy.__dict__["levelprefix"] = levelname + ":" + seperator
+        recordcopy.__dict__["levelprefix"] = levelname + ":" + separator
         return super().formatMessage(recordcopy)
 
 

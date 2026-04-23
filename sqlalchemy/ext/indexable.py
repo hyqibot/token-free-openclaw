@@ -1,10 +1,9 @@
 # ext/indexable.py
-# Copyright (C) 2005-2024 the SQLAlchemy authors and contributors
+# Copyright (C) 2005-2026 the SQLAlchemy authors and contributors
 # <see AUTHORS file>
 #
 # This module is part of SQLAlchemy and is released under
 # the MIT License: https://www.opensource.org/licenses/mit-license.php
-# mypy: ignore-errors
 
 """Define attributes on ORM-mapped classes that have "index" attributes for
 columns with :class:`_types.Indexable` types.
@@ -36,19 +35,19 @@ as a dedicated attribute which behaves like a standalone column::
 
     Base = declarative_base()
 
+
     class Person(Base):
-        __tablename__ = 'person'
+        __tablename__ = "person"
 
         id = Column(Integer, primary_key=True)
         data = Column(JSON)
 
-        name = index_property('data', 'name')
-
+        name = index_property("data", "name")
 
 Above, the ``name`` attribute now behaves like a mapped column.   We
 can compose a new ``Person`` and set the value of ``name``::
 
-    >>> person = Person(name='Alchemist')
+    >>> person = Person(name="Alchemist")
 
 The value is now accessible::
 
@@ -59,11 +58,11 @@ Behind the scenes, the JSON field was initialized to a new blank dictionary
 and the field was set::
 
     >>> person.data
-    {"name": "Alchemist'}
+    {'name': 'Alchemist'}
 
 The field is mutable in place::
 
-    >>> person.name = 'Renamed'
+    >>> person.name = "Renamed"
     >>> person.name
     'Renamed'
     >>> person.data
@@ -87,18 +86,17 @@ A missing key will produce ``AttributeError``::
 
     >>> person = Person()
     >>> person.name
-    ...
     AttributeError: 'name'
 
 Unless you set a default value::
 
     >>> class Person(Base):
-    >>>     __tablename__ = 'person'
-    >>>
-    >>>     id = Column(Integer, primary_key=True)
-    >>>     data = Column(JSON)
-    >>>
-    >>>     name = index_property('data', 'name', default=None)  # See default
+    ...     __tablename__ = "person"
+    ...
+    ...     id = Column(Integer, primary_key=True)
+    ...     data = Column(JSON)
+    ...
+    ...     name = index_property("data", "name", default=None)  # See default
 
     >>> person = Person()
     >>> print(person.name)
@@ -111,11 +109,11 @@ an indexed SQL criteria::
 
     >>> from sqlalchemy.orm import Session
     >>> session = Session()
-    >>> query = session.query(Person).filter(Person.name == 'Alchemist')
+    >>> query = session.query(Person).filter(Person.name == "Alchemist")
 
 The above query is equivalent to::
 
-    >>> query = session.query(Person).filter(Person.data['name'] == 'Alchemist')
+    >>> query = session.query(Person).filter(Person.data["name"] == "Alchemist")
 
 Multiple :class:`.index_property` objects can be chained to produce
 multiple levels of indexing::
@@ -126,22 +124,25 @@ multiple levels of indexing::
 
     Base = declarative_base()
 
+
     class Person(Base):
-        __tablename__ = 'person'
+        __tablename__ = "person"
 
         id = Column(Integer, primary_key=True)
         data = Column(JSON)
 
-        birthday = index_property('data', 'birthday')
-        year = index_property('birthday', 'year')
-        month = index_property('birthday', 'month')
-        day = index_property('birthday', 'day')
+        birthday = index_property("data", "birthday")
+        year = index_property("birthday", "year")
+        month = index_property("birthday", "month")
+        day = index_property("birthday", "day")
 
 Above, a query such as::
 
-    q = session.query(Person).filter(Person.year == '1980')
+    q = session.query(Person).filter(Person.year == "1980")
 
-On a PostgreSQL backend, the above query will render as::
+On a PostgreSQL backend, the above query will render as:
+
+.. sourcecode:: sql
 
     SELECT person.id, person.data
     FROM person
@@ -198,13 +199,14 @@ version of :class:`_postgresql.JSON`::
 
     Base = declarative_base()
 
+
     class Person(Base):
-        __tablename__ = 'person'
+        __tablename__ = "person"
 
         id = Column(Integer, primary_key=True)
         data = Column(JSON)
 
-        age = pg_json_property('data', 'age', Integer)
+        age = pg_json_property("data", "age", Integer)
 
 The ``age`` attribute at the instance level works as before; however
 when rendering SQL, PostgreSQL's ``->>`` operator will be used
@@ -212,22 +214,41 @@ for indexed access, instead of the usual index operator of ``->``::
 
     >>> query = session.query(Person).filter(Person.age < 20)
 
-The above query will render::
+The above query will render:
+
+.. sourcecode:: sql
 
     SELECT person.id, person.data
     FROM person
     WHERE CAST(person.data ->> %(data_1)s AS INTEGER) < %(param_1)s
 
 """  # noqa
+
+from __future__ import annotations
+
+from typing import Any
+from typing import Callable
+from typing import cast
+from typing import Optional
+from typing import TYPE_CHECKING
+from typing import TypeVar
+from typing import Union
+
 from .. import inspect
 from ..ext.hybrid import hybrid_property
 from ..orm.attributes import flag_modified
 
+if TYPE_CHECKING:
+    from ..sql import SQLColumnExpression
+    from ..sql._typing import _HasClauseElement
+
 
 __all__ = ["index_property"]
 
+_T = TypeVar("_T")
 
-class index_property(hybrid_property):  # noqa
+
+class index_property(hybrid_property[_T]):
     """A property generator. The generated property describes an object
     attribute that corresponds to an :class:`_types.Indexable`
     column.
@@ -238,16 +259,16 @@ class index_property(hybrid_property):  # noqa
 
     """
 
-    _NO_DEFAULT_ARGUMENT = object()
+    _NO_DEFAULT_ARGUMENT = cast(_T, object())
 
     def __init__(
         self,
-        attr_name,
-        index,
-        default=_NO_DEFAULT_ARGUMENT,
-        datatype=None,
-        mutable=True,
-        onebased=True,
+        attr_name: str,
+        index: Union[int, str],
+        default: _T = _NO_DEFAULT_ARGUMENT,
+        datatype: Optional[Callable[[], Any]] = None,
+        mutable: bool = True,
+        onebased: bool = True,
     ):
         """Create a new :class:`.index_property`.
 
@@ -286,20 +307,20 @@ class index_property(hybrid_property):  # noqa
             self.datatype = datatype
         else:
             if is_numeric:
-                self.datatype = lambda: [None for x in range(index + 1)]
+                self.datatype = lambda: [None for x in range(index + 1)]  # type: ignore[operator]  # noqa: E501
             else:
                 self.datatype = dict
         self.onebased = onebased
 
-    def _fget_default(self, err=None):
+    def _fget_default(self, err: Optional[BaseException] = None) -> _T:
         if self.default == self._NO_DEFAULT_ARGUMENT:
             raise AttributeError(self.attr_name) from err
         else:
             return self.default
 
-    def fget(self, instance):
+    def fget(self, __instance: Any) -> _T:
         attr_name = self.attr_name
-        column_value = getattr(instance, attr_name)
+        column_value = getattr(__instance, attr_name)
         if column_value is None:
             return self._fget_default()
         try:
@@ -307,9 +328,9 @@ class index_property(hybrid_property):  # noqa
         except (KeyError, IndexError) as err:
             return self._fget_default(err)
         else:
-            return value
+            return value  # type: ignore[no-any-return]
 
-    def fset(self, instance, value):
+    def fset(self, instance: Any, value: _T) -> None:
         attr_name = self.attr_name
         column_value = getattr(instance, attr_name, None)
         if column_value is None:
@@ -320,7 +341,7 @@ class index_property(hybrid_property):  # noqa
         if attr_name in inspect(instance).mapper.attrs:
             flag_modified(instance, attr_name)
 
-    def fdel(self, instance):
+    def fdel(self, instance: Any) -> None:
         attr_name = self.attr_name
         column_value = getattr(instance, attr_name)
         if column_value is None:
@@ -333,9 +354,11 @@ class index_property(hybrid_property):  # noqa
             setattr(instance, attr_name, column_value)
             flag_modified(instance, attr_name)
 
-    def expr(self, model):
+    def expr(
+        self, model: Any
+    ) -> Union[_HasClauseElement[_T], SQLColumnExpression[_T]]:
         column = getattr(model, self.attr_name)
         index = self.index
         if self.onebased:
-            index += 1
-        return column[index]
+            index += 1  # type: ignore[operator]
+        return column[index]  # type: ignore[no-any-return]

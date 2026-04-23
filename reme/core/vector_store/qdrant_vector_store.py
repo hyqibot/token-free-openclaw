@@ -248,7 +248,7 @@ class QdrantVectorStore(BaseVectorStore):
         logger.info(f"Inserted {len(points)} documents into {self.collection_name}")
 
     @staticmethod
-    def _create_filter(filters: dict) -> "Filter | None":#
+    def _create_filter(filters: dict) -> "Filter | None":
         """Convert a dictionary of filter conditions into a Qdrant Filter object.
 
         Supports two filter formats:

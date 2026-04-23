@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import abc
 
+from cryptography import utils
+
 # This exists to break an import cycle. It is normally accessible from the
 # ciphers module.
 
@@ -34,7 +36,7 @@ class CipherAlgorithm(metaclass=abc.ABCMeta):
 
 
 class BlockCipherAlgorithm(CipherAlgorithm):
-    key: bytes
+    key: utils.Buffer
 
     @property
     @abc.abstractmethod
@@ -42,3 +44,17 @@ class BlockCipherAlgorithm(CipherAlgorithm):
         """
         The size of a block as an integer in bits (e.g. 64, 128).
         """
+
+
+def _verify_key_size(
+    algorithm: CipherAlgorithm, key: utils.Buffer
+) -> utils.Buffer:
+    # Verify that the key is instance of bytes
+    utils._check_byteslike("key", key)
+
+    # Verify that the key size matches the expected key size
+    if len(key) * 8 not in algorithm.key_sizes:
+        raise ValueError(
+            f"Invalid key size ({len(key) * 8}) for {algorithm.name}."
+        )
+    return key

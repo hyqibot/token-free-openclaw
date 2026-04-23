@@ -1,0 +1,3 @@
+[console_scripts]
+segno=segno.cli:main
+

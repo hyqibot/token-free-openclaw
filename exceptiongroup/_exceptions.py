@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Sequence
 from functools import partial
 from inspect import getmro, isclass
 from typing import TYPE_CHECKING, Generic, Type, TypeVar, cast, overload
 
-_BaseExceptionT_co = TypeVar("_BaseExceptionT_co", bound=BaseException, covariant=True)
+if sys.version_info < (3, 13):
+    from typing_extensions import TypeVar
+
+_BaseExceptionT_co = TypeVar(
+    "_BaseExceptionT_co", bound=BaseException, covariant=True, default=BaseException
+)
 _BaseExceptionT = TypeVar("_BaseExceptionT", bound=BaseException)
-_ExceptionT_co = TypeVar("_ExceptionT_co", bound=Exception, covariant=True)
+_ExceptionT_co = TypeVar(
+    "_ExceptionT_co", bound=Exception, covariant=True, default=Exception
+)
 _ExceptionT = TypeVar("_ExceptionT", bound=Exception)
 # using typing.Self would require a typing_extensions dependency on py<3.11
 _ExceptionGroupSelf = TypeVar("_ExceptionGroupSelf", bound="ExceptionGroup")
@@ -93,9 +101,16 @@ class BaseExceptionGroup(BaseException, Generic[_BaseExceptionT_co]):
                         )
 
         instance = super().__new__(cls, __message, __exceptions)
-        instance._message = __message
-        instance._exceptions = __exceptions
+        instance._exceptions = tuple(__exceptions)
         return instance
+
+    def __init__(
+        self,
+        __message: str,
+        __exceptions: Sequence[_BaseExceptionT_co],
+        *args: object,
+    ) -> None:
+        BaseException.__init__(self, __message, __exceptions, *args)
 
     def add_note(self, note: str) -> None:
         if not isinstance(note, str):
@@ -110,7 +125,7 @@ class BaseExceptionGroup(BaseException, Generic[_BaseExceptionT_co]):
 
     @property
     def message(self) -> str:
-        return self._message
+        return self.args[0]
 
     @property
     def exceptions(
@@ -260,7 +275,7 @@ class BaseExceptionGroup(BaseException, Generic[_BaseExceptionT_co]):
         return f"{self.message} ({len(self._exceptions)} sub-exception{suffix})"
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.message!r}, {self._exceptions!r})"
+        return f"{self.__class__.__name__}({self.args[0]!r}, {self.args[1]!r})"
 
 
 class ExceptionGroup(BaseExceptionGroup[_ExceptionT_co], Exception):
